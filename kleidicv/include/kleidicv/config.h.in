@@ -35,6 +35,10 @@
 
 #cmakedefine01 KLEIDICV_EXPERIMENTAL_FEATURE_ADD_SME2
 
+// clang-format off
+#cmakedefine KLEIDICV_MAX_SME_THREADS (@KLEIDICV_MAX_SME_THREADS@)
+// clang-format on
+
 // Set to '1' if compiling NEON code paths, otherwise it is set to '0'.
 #ifndef KLEIDICV_TARGET_NEON
 #define KLEIDICV_TARGET_NEON 0

@@ -5,10 +5,12 @@
 #include "kleidicv_thread/kleidicv_thread.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <utility>
 #include <vector>
 
 #include "kleidicv/arithmetics/rotate.h"
@@ -26,6 +28,9 @@
 #include "kleidicv/resize/resize_linear.h"
 #include "kleidicv/transform/remap.h"
 #include "kleidicv/transform/warp_perspective.h"
+#if KLEIDICV_ENABLE_SME
+#include "kleidicv/dispatch.h"
+#endif  // KLEIDICV_ENABLE_SME
 
 typedef std::function<kleidicv_error_t(unsigned, unsigned)> FunctionCallback;
 
@@ -88,6 +93,53 @@ inline kleidicv_error_t kleidicv_thread_unary_op_impl(
   };
   return parallel_batches(callback, mt, height);
 }
+
+#if KLEIDICV_ENABLE_SME
+const bool kHwCapsHasSme = kleidicv::hwcaps_has_sme(kleidicv::get_hwcaps());
+
+class SmeThreadLimiter {
+ public:
+  static std::pair<bool, kleidicv_error_t> try_to_run_sme_thread(
+      const std::function<kleidicv_error_t()> &callback) {
+    static SmeThreadLimiter sme_thread_limiter;
+
+    return sme_thread_limiter.try_to_run_sme_thread_(callback);
+  }
+
+ private:
+  SmeThreadLimiter() : available_sme_thread_num_{KLEIDICV_MAX_SME_THREADS} {};
+
+  std::pair<bool, kleidicv_error_t> try_to_run_sme_thread_(
+      const std::function<kleidicv_error_t()> &callback) {
+    int thread_num_local = available_sme_thread_num_.load();
+    // Attempt to atomically decrement available_sme_thread_num_ if we think we
+    // have more than zero threads, else update the local value.
+    while (thread_num_local > 0 &&
+           !available_sme_thread_num_.compare_exchange_strong(
+               thread_num_local, thread_num_local - 1)) {
+    }
+
+    if (thread_num_local > 0) {
+      // As exceptions are turned off at build time it is fine to run the
+      // callback and plainly increase the thread counter afterwards.
+      kleidicv_error_t r = callback();
+      available_sme_thread_num_++;
+      return std::make_pair(true, r);
+    }
+
+    return std::make_pair(false, kleidicv_error_t{});
+  }
+
+  std::atomic<int> available_sme_thread_num_;
+
+ public:
+  // These are not strictly needed as an object reference cannot be get outside
+  // the class, but as this class is a Singleton the reader might expect these.
+  SmeThreadLimiter(SmeThreadLimiter const &) = delete;
+  void operator=(SmeThreadLimiter const &) = delete;
+};  // end of class SmeThreadLimiter
+
+#endif  // KLEIDICV_ENABLE_SME
 
 template <typename SrcT, typename DstT, typename F, typename... Args>
 inline kleidicv_error_t kleidicv_thread_binary_op_impl(
@@ -755,6 +807,36 @@ kleidicv_error_t kleidicv_thread_median_blur_u8(
   }
 
   if (kernel_width <= 7) {
+#if KLEIDICV_ENABLE_SME
+    if (kHwCapsHasSme) {
+      auto callback = [=](unsigned y_begin, unsigned y_end) {
+        auto sme_callback = [=]() {
+          return kleidicv::sme::median_blur_sorting_network_stripe<uint8_t>(
+              src, src_stride, dst, dst_stride, width, height, y_begin, y_end,
+              channels, kernel_width, kernel_height, fixed_border_type);
+        };
+
+        auto sme_call_result_pair =
+            SmeThreadLimiter::try_to_run_sme_thread(sme_callback);
+        if (sme_call_result_pair.first) {
+          return sme_call_result_pair.second;
+        }
+
+        // Reimplementing the dispatcher's decision.
+#if KLEIDICV_ENABLE_SVE2 && KLEIDICV_ALWAYS_ENABLE_SVE2
+        return kleidicv::sve2::median_blur_sorting_network_stripe<uint8_t>(
+            src, src_stride, dst, dst_stride, width, height, y_begin, y_end,
+            channels, kernel_width, kernel_height, fixed_border_type);
+#else
+        return kleidicv::neon::median_blur_sorting_network_stripe<uint8_t>(
+            src, src_stride, dst, dst_stride, width, height, y_begin, y_end,
+            channels, kernel_width, kernel_height, fixed_border_type);
+#endif
+      };
+      return parallel_batches(callback, mt, height);
+    }
+#endif
+
     auto callback = [=](unsigned y_begin, unsigned y_end) {
       return kleidicv_median_blur_sorting_network_stripe_u8(
           src, src_stride, dst, dst_stride, width, height, y_begin, y_end,
