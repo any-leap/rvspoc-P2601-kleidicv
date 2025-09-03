@@ -7,8 +7,7 @@
 
 #include "kleidicv/config.h"
 
-#if defined(KLEIDICV_HAVE_SVE2) || defined(KLEIDICV_HAVE_SME) || \
-    defined(KLEIDICV_HAVE_SME2)
+#if KLEIDICV_ENABLE_SME2 || KLEIDICV_ENABLE_SME || KLEIDICV_ENABLE_SVE2
 #include <sys/auxv.h>
 
 #include <cstdint>
@@ -27,7 +26,7 @@ static inline HwCaps get_hwcaps() {
   return HwCaps{getauxval(AT_HWCAP), getauxval(AT_HWCAP2)};
 }
 
-#ifdef KLEIDICV_HAVE_SVE2
+#if KLEIDICV_ENABLE_SVE2
 static inline bool hwcaps_has_sve2(HwCaps hwcaps) {
   return hwcaps.hwcap2 & (1 << 1);
 }
@@ -39,9 +38,9 @@ static inline bool hwcaps_has_sve2(HwCaps hwcaps) {
   }
 #else
 #define KLEIDICV_SVE2_RESOLVE(x)
-#endif  // KLEIDICV_HAVE_SVE2
+#endif  // KLEIDICV_ENABLE_SVE2
 
-#ifdef KLEIDICV_HAVE_SME
+#if KLEIDICV_ENABLE_SME
 static inline bool hwcaps_has_sme(HwCaps hwcaps) {
   const int kSMEBit = 23;
   return hwcaps.hwcap2 & (1UL << kSMEBit);
@@ -54,9 +53,9 @@ static inline bool hwcaps_has_sme(HwCaps hwcaps) {
   }
 #else
 #define KLEIDICV_SME_RESOLVE(x)
-#endif  // KLEIDICV_HAVE_SME
+#endif  // KLEIDICV_ENABLE_SME
 
-#ifdef KLEIDICV_HAVE_SME2
+#if KLEIDICV_ENABLE_SME2
 static inline bool hwcaps_has_sme2(HwCaps hwcaps) {
   const int kSME2Bit = 37;
   return hwcaps.hwcap2 & (1UL << kSME2Bit);
@@ -69,7 +68,7 @@ static inline bool hwcaps_has_sme2(HwCaps hwcaps) {
   }
 #else
 #define KLEIDICV_SME2_RESOLVE(x)
-#endif  // KLEIDICV_HAVE_SME2
+#endif  // KLEIDICV_ENABLE_SME2
 
 }  // namespace KLEIDICV_TARGET_NAMESPACE
 
@@ -96,7 +95,7 @@ static inline bool hwcaps_has_sme2(HwCaps hwcaps) {
   decltype(neon_impl) api_name = neon_impl;                                   \
   }
 
-#endif  // KLEIDICV_HAVE_SVE2 || KLEIDICV_HAVE_SME || KLEIDICV_HAVE_SME2
+#endif  // KLEIDICV_ENABLE_SME2 || KLEIDICV_ENABLE_SME ||  KLEIDICV_ENABLE_SVE2
 
 #if KLEIDICV_ALWAYS_ENABLE_SME2
 #define KLEIDICV_SME2_IMPL_IF(func) func

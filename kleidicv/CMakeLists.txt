@@ -222,16 +222,13 @@ target_compile_options(kleidicv PRIVATE ${KLEIDICV_CXX_FLAGS})
 target_link_libraries(kleidicv PRIVATE kleidicv_neon)
 
 if(KLEIDICV_ENABLE_SVE2)
-  target_compile_definitions(kleidicv PRIVATE KLEIDICV_HAVE_SVE2)
   target_link_libraries(kleidicv PRIVATE kleidicv_sve2)
 endif()
 
 if(KLEIDICV_ENABLE_SME)
-  target_compile_definitions(kleidicv PRIVATE KLEIDICV_HAVE_SME)
   target_link_libraries(kleidicv PRIVATE kleidicv_sme)
 endif()
 
 if(KLEIDICV_ENABLE_SME2)
-  target_compile_definitions(kleidicv PRIVATE KLEIDICV_HAVE_SME2)
   target_link_libraries(kleidicv PRIVATE kleidicv_sme2)
 endif()

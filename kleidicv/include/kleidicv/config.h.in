@@ -7,6 +7,12 @@
 
 // Main configuration switches.
 
+#cmakedefine01 KLEIDICV_ENABLE_SME2
+
+#cmakedefine01 KLEIDICV_ENABLE_SME
+
+#cmakedefine01 KLEIDICV_ENABLE_SVE2
+
 #cmakedefine01 KLEIDICV_ALWAYS_ENABLE_SME2
 
 #cmakedefine01 KLEIDICV_ALWAYS_ENABLE_SME
