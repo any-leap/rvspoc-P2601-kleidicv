@@ -25,6 +25,7 @@
 #include "kleidicv/filters/separable_filter_2d.h"
 #include "kleidicv/filters/sobel.h"
 #include "kleidicv/kleidicv.h"
+#include "kleidicv/resize/resize.h"
 #include "kleidicv/resize/resize_linear.h"
 #include "kleidicv/transform/remap.h"
 #include "kleidicv/transform/warp_perspective.h"
@@ -647,6 +648,40 @@ kleidicv_error_t kleidicv_thread_gaussian_blur_u8(
   }
 
   if (kernel_width <= 7 || kernel_width == 15 || kernel_width == 21) {
+#if KLEIDICV_ENABLE_SME
+    if (kHwCapsHasSme) {
+      auto callback = [=](unsigned y_begin, unsigned y_end,
+                          kleidicv_filter_context_t *thread_context) {
+        auto sme_callback = [=]() {
+          return kleidicv::sme::gaussian_blur_fixed_stripe_u8(
+              src, src_stride, dst, dst_stride, width, height, y_begin, y_end,
+              channels, kernel_width, kernel_height, sigma_x, sigma_y,
+              *fixed_border_type, thread_context);
+        };
+
+        auto sme_call_result_pair =
+            SmeThreadLimiter::try_to_run_sme_thread(sme_callback);
+        if (sme_call_result_pair.first) {
+          return sme_call_result_pair.second;
+        }
+
+        // Reimplementing the dispatcher's decision.
+#if KLEIDICV_ENABLE_SVE2 && KLEIDICV_ALWAYS_ENABLE_SVE2
+        return kleidicv::sve2::gaussian_blur_fixed_stripe_u8(
+            src, src_stride, dst, dst_stride, width, height, y_begin, y_end,
+            channels, kernel_width, kernel_height, sigma_x, sigma_y,
+            *fixed_border_type, thread_context);
+#else
+        return kleidicv::neon::gaussian_blur_fixed_stripe_u8(
+            src, src_stride, dst, dst_stride, width, height, y_begin, y_end,
+            channels, kernel_width, kernel_height, sigma_x, sigma_y,
+            *fixed_border_type, thread_context);
+#endif
+      };
+      return kleidicv_thread_filter(callback, width, height, channels,
+                                    kernel_width, kernel_height, context, mt);
+    }
+#endif
     auto callback = [=](size_t y_begin, size_t y_end,
                         kleidicv_filter_context_t *thread_context) {
       return kleidicv_gaussian_blur_fixed_stripe_u8(
@@ -783,6 +818,36 @@ kleidicv_error_t kleidicv_thread_sobel_3x3_horizontal_s16_u8(
     return KLEIDICV_ERROR_NOT_IMPLEMENTED;
   }
 
+#if KLEIDICV_ENABLE_SME
+  if (kHwCapsHasSme) {
+    auto callback = [=](unsigned y_begin, unsigned y_end) {
+      auto sme_callback = [=]() {
+        return kleidicv::sme::sobel_3x3_horizontal_stripe_s16_u8(
+            src, src_stride, dst, dst_stride, width, height, y_begin, y_end,
+            channels);
+      };
+
+      auto sme_call_result_pair =
+          SmeThreadLimiter::try_to_run_sme_thread(sme_callback);
+      if (sme_call_result_pair.first) {
+        return sme_call_result_pair.second;
+      }
+
+      // Reimplementing the dispatcher's decision.
+#if KLEIDICV_ENABLE_SVE2 && KLEIDICV_ALWAYS_ENABLE_SVE2
+      return kleidicv::sve2::sobel_3x3_horizontal_stripe_s16_u8(
+          src, src_stride, dst, dst_stride, width, height, y_begin, y_end,
+          channels);
+#else
+      return kleidicv::neon::sobel_3x3_horizontal_stripe_s16_u8(
+          src, src_stride, dst, dst_stride, width, height, y_begin, y_end,
+          channels);
+#endif
+    };
+    return parallel_batches(callback, mt, height);
+  }
+#endif
+
   auto callback = [=](unsigned y_begin, unsigned y_end) {
     return kleidicv_sobel_3x3_horizontal_stripe_s16_u8(
         src, src_stride, dst, dst_stride, width, height, y_begin, y_end,
@@ -877,6 +942,36 @@ kleidicv_error_t kleidicv_thread_median_blur_s16(
     return checks_result;
   }
 
+#if KLEIDICV_ENABLE_SME
+  if (kHwCapsHasSme) {
+    auto callback = [=](unsigned y_begin, unsigned y_end) {
+      auto sme_callback = [=]() {
+        return kleidicv::sme::median_blur_sorting_network_stripe<int16_t>(
+            src, src_stride, dst, dst_stride, width, height, y_begin, y_end,
+            channels, kernel_width, kernel_height, fixed_border_type);
+      };
+
+      auto sme_call_result_pair =
+          SmeThreadLimiter::try_to_run_sme_thread(sme_callback);
+      if (sme_call_result_pair.first) {
+        return sme_call_result_pair.second;
+      }
+
+      // Reimplementing the dispatcher's decision.
+#if KLEIDICV_ENABLE_SVE2 && KLEIDICV_ALWAYS_ENABLE_SVE2
+      return kleidicv::sve2::median_blur_sorting_network_stripe<int16_t>(
+          src, src_stride, dst, dst_stride, width, height, y_begin, y_end,
+          channels, kernel_width, kernel_height, fixed_border_type);
+#else
+      return kleidicv::neon::median_blur_sorting_network_stripe<int16_t>(
+          src, src_stride, dst, dst_stride, width, height, y_begin, y_end,
+          channels, kernel_width, kernel_height, fixed_border_type);
+#endif
+    };
+    return parallel_batches(callback, mt, height);
+  }
+#endif
+
   auto callback = [=](unsigned y_begin, unsigned y_end) {
     return kleidicv_median_blur_sorting_network_stripe_s16(
         src, src_stride, dst, dst_stride, width, height, y_begin, y_end,
@@ -899,6 +994,36 @@ kleidicv_error_t kleidicv_thread_median_blur_u16(
   if (checks_result != KLEIDICV_OK) {
     return checks_result;
   }
+
+#if KLEIDICV_ENABLE_SME
+  if (kHwCapsHasSme) {
+    auto callback = [=](unsigned y_begin, unsigned y_end) {
+      auto sme_callback = [=]() {
+        return kleidicv::sme::median_blur_sorting_network_stripe<uint16_t>(
+            src, src_stride, dst, dst_stride, width, height, y_begin, y_end,
+            channels, kernel_width, kernel_height, fixed_border_type);
+      };
+
+      auto sme_call_result_pair =
+          SmeThreadLimiter::try_to_run_sme_thread(sme_callback);
+      if (sme_call_result_pair.first) {
+        return sme_call_result_pair.second;
+      }
+
+      // Reimplementing the dispatcher's decision.
+#if KLEIDICV_ENABLE_SVE2 && KLEIDICV_ALWAYS_ENABLE_SVE2
+      return kleidicv::sve2::median_blur_sorting_network_stripe<uint16_t>(
+          src, src_stride, dst, dst_stride, width, height, y_begin, y_end,
+          channels, kernel_width, kernel_height, fixed_border_type);
+#else
+      return kleidicv::neon::median_blur_sorting_network_stripe<uint16_t>(
+          src, src_stride, dst, dst_stride, width, height, y_begin, y_end,
+          channels, kernel_width, kernel_height, fixed_border_type);
+#endif
+    };
+    return parallel_batches(callback, mt, height);
+  }
+#endif
 
   auto callback = [=](unsigned y_begin, unsigned y_end) {
     return kleidicv_median_blur_sorting_network_stripe_u16(
@@ -923,6 +1048,35 @@ kleidicv_error_t kleidicv_thread_median_blur_f32(
     return checks_result;
   }
 
+#if KLEIDICV_ENABLE_SME
+  if (kHwCapsHasSme) {
+    auto callback = [=](unsigned y_begin, unsigned y_end) {
+      auto sme_callback = [=]() {
+        return kleidicv::sme::median_blur_sorting_network_stripe<float>(
+            src, src_stride, dst, dst_stride, width, height, y_begin, y_end,
+            channels, kernel_width, kernel_height, fixed_border_type);
+      };
+
+      auto sme_call_result_pair =
+          SmeThreadLimiter::try_to_run_sme_thread(sme_callback);
+      if (sme_call_result_pair.first) {
+        return sme_call_result_pair.second;
+      }
+
+      // Reimplementing the dispatcher's decision.
+#if KLEIDICV_ENABLE_SVE2 && KLEIDICV_ALWAYS_ENABLE_SVE2
+      return kleidicv::sve2::median_blur_sorting_network_stripe<float>(
+          src, src_stride, dst, dst_stride, width, height, y_begin, y_end,
+          channels, kernel_width, kernel_height, fixed_border_type);
+#else
+      return kleidicv::neon::median_blur_sorting_network_stripe<float>(
+          src, src_stride, dst, dst_stride, width, height, y_begin, y_end,
+          channels, kernel_width, kernel_height, fixed_border_type);
+#endif
+    };
+    return parallel_batches(callback, mt, height);
+  }
+#endif
   auto callback = [=](unsigned y_begin, unsigned y_end) {
     return kleidicv_median_blur_sorting_network_stripe_f32(
         src, src_stride, dst, dst_stride, width, height, y_begin, y_end,
@@ -938,6 +1092,36 @@ kleidicv_error_t kleidicv_thread_sobel_3x3_vertical_s16_u8(
   if (!kleidicv::sobel_is_implemented(width, height, 3)) {
     return KLEIDICV_ERROR_NOT_IMPLEMENTED;
   }
+
+#if KLEIDICV_ENABLE_SME
+  if (kHwCapsHasSme) {
+    auto callback = [=](unsigned y_begin, unsigned y_end) {
+      auto sme_callback = [=]() {
+        return kleidicv::sme::sobel_3x3_vertical_stripe_s16_u8(
+            src, src_stride, dst, dst_stride, width, height, y_begin, y_end,
+            channels);
+      };
+
+      auto sme_call_result_pair =
+          SmeThreadLimiter::try_to_run_sme_thread(sme_callback);
+      if (sme_call_result_pair.first) {
+        return sme_call_result_pair.second;
+      }
+
+      // Reimplementing the dispatcher's decision.
+#if KLEIDICV_ENABLE_SVE2 && KLEIDICV_ALWAYS_ENABLE_SVE2
+      return kleidicv::sve2::sobel_3x3_vertical_stripe_s16_u8(
+          src, src_stride, dst, dst_stride, width, height, y_begin, y_end,
+          channels);
+#else
+      return kleidicv::neon::sobel_3x3_vertical_stripe_s16_u8(
+          src, src_stride, dst, dst_stride, width, height, y_begin, y_end,
+          channels);
+#endif
+    };
+    return parallel_batches(callback, mt, height);
+  }
+#endif
 
   auto callback = [=](unsigned y_begin, unsigned y_end) {
     return kleidicv_sobel_3x3_vertical_stripe_s16_u8(src, src_stride, dst,
@@ -981,6 +1165,36 @@ kleidicv_error_t kleidicv_thread_resize_to_quarter_u8(
       return KLEIDICV_OK;
     }
 
+#if KLEIDICV_ENABLE_SME
+    if (kHwCapsHasSme) {
+      auto sme_callback = [=]() {
+        return kleidicv::sme::resize_to_quarter_u8(
+            src + src_begin * src_stride, src_stride, src_width,
+            src_end - src_begin, dst + dst_begin * dst_stride, dst_stride,
+            dst_width, dst_end - dst_begin);
+      };
+
+      auto sme_call_result_pair =
+          SmeThreadLimiter::try_to_run_sme_thread(sme_callback);
+      if (sme_call_result_pair.first) {
+        return sme_call_result_pair.second;
+      }
+
+      // Reimplementing the dispatcher's decision.
+#if KLEIDICV_ENABLE_SVE2 && KLEIDICV_ALWAYS_ENABLE_SVE2
+      return kleidicv::sve2::resize_to_quarter_u8(
+          src + src_begin * src_stride, src_stride, src_width,
+          src_end - src_begin, dst + dst_begin * dst_stride, dst_stride,
+          dst_width, dst_end - dst_begin);
+#else
+      return kleidicv::neon::resize_to_quarter_u8(
+          src + src_begin * src_stride, src_stride, src_width,
+          src_end - src_begin, dst + dst_begin * dst_stride, dst_stride,
+          dst_width, dst_end - dst_begin);
+#endif
+    }
+#endif
+
     return kleidicv_resize_to_quarter_u8(
         src + src_begin * src_stride, src_stride, src_width,
         src_end - src_begin, dst + dst_begin * dst_stride, dst_stride,
@@ -997,6 +1211,40 @@ kleidicv_error_t kleidicv_thread_resize_linear_u8(
                                                  dst_width, dst_height)) {
     return KLEIDICV_ERROR_NOT_IMPLEMENTED;
   }
+
+#if KLEIDICV_ENABLE_SME
+  if (kHwCapsHasSme) {
+    auto callback = [=](unsigned y_begin, unsigned y_end) {
+      auto sme_callback = [=]() {
+        return kleidicv::sme::resize_linear_stripe_u8(
+            src, src_stride, src_width, src_height, y_begin,
+            std::min<size_t>(src_height, y_end + 1), dst, dst_stride, dst_width,
+            dst_height);
+      };
+
+      auto sme_call_result_pair =
+          SmeThreadLimiter::try_to_run_sme_thread(sme_callback);
+      if (sme_call_result_pair.first) {
+        return sme_call_result_pair.second;
+      }
+
+      // Reimplementing the dispatcher's decision.
+#if KLEIDICV_ENABLE_SVE2 && KLEIDICV_ALWAYS_ENABLE_SVE2
+      return kleidicv::sve2::resize_linear_stripe_u8(
+          src, src_stride, src_width, src_height, y_begin,
+          std::min<size_t>(src_height, y_end + 1), dst, dst_stride, dst_width,
+          dst_height);
+#else
+      return kleidicv::neon::resize_linear_stripe_u8(
+          src, src_stride, src_width, src_height, y_begin,
+          std::min<size_t>(src_height, y_end + 1), dst, dst_stride, dst_width,
+          dst_height);
+#endif
+    };
+    return parallel_batches(callback, mt, std::max<size_t>(1, src_height - 1));
+  }
+#endif
+
   auto callback = [=](unsigned y_begin, unsigned y_end) {
     return kleidicv_resize_linear_stripe_u8(
         src, src_stride, src_width, src_height, y_begin,
@@ -1014,6 +1262,40 @@ kleidicv_error_t kleidicv_thread_resize_linear_f32(
                                                   dst_width, dst_height)) {
     return KLEIDICV_ERROR_NOT_IMPLEMENTED;
   }
+
+#if KLEIDICV_ENABLE_SME
+  if (kHwCapsHasSme) {
+    auto callback = [=](unsigned y_begin, unsigned y_end) {
+      auto sme_callback = [=]() {
+        return kleidicv::sme::resize_linear_stripe_f32(
+            src, src_stride, src_width, src_height, y_begin,
+            std::min<size_t>(src_height, y_end + 1), dst, dst_stride, dst_width,
+            dst_height);
+      };
+
+      auto sme_call_result_pair =
+          SmeThreadLimiter::try_to_run_sme_thread(sme_callback);
+      if (sme_call_result_pair.first) {
+        return sme_call_result_pair.second;
+      }
+
+      // Reimplementing the dispatcher's decision.
+#if KLEIDICV_ENABLE_SVE2 && KLEIDICV_ALWAYS_ENABLE_SVE2
+      return kleidicv::sve2::resize_linear_stripe_f32(
+          src, src_stride, src_width, src_height, y_begin,
+          std::min<size_t>(src_height, y_end + 1), dst, dst_stride, dst_width,
+          dst_height);
+#else
+      return kleidicv::neon::resize_linear_stripe_f32(
+          src, src_stride, src_width, src_height, y_begin,
+          std::min<size_t>(src_height, y_end + 1), dst, dst_stride, dst_width,
+          dst_height);
+#endif
+    };
+    return parallel_batches(callback, mt, std::max<size_t>(1, src_height - 1));
+  }
+#endif
+
   auto callback = [=](unsigned y_begin, unsigned y_end) {
     return kleidicv_resize_linear_stripe_f32(
         src, src_stride, src_width, src_height, y_begin,
