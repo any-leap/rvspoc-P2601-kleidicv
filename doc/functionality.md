@@ -161,6 +161,7 @@ Resize operations using linear interpolation.
 | 4x4 (1 channel)                        |  x  |  x  |
 | 8x8 (1 channel)                        |     |  x  |
 | Downsize 1/3 to 1 (1, 2 or 3 channels) |  x  |     |
+| Downsize to 0.5x0.5 (4 channels)       |  x  |     |
 
 Note: For the linear downsize, width ratio is limited to 0.33 - 1.0, but
 height ratio can be anything between 0.0 and 1.0.

@@ -469,9 +469,9 @@ static void resize_downscale(F f, double scale_x, double scale_y,
             state, channels);
 }
 
-static void resize_u8_downscale_channels(benchmark::internal::Benchmark* b) {
+static void resize_quarter_channels(benchmark::internal::Benchmark* b) {
   b->ArgNames({"channels"});
-  for (int channel : {1, 2, 3}) {
+  for (int channel : {1, 2, 3, 4}) {
     b->Args({channel});
   }
 }
@@ -481,21 +481,28 @@ static void resize_quarter_u8(benchmark::State& state) {
   resize_downscale<uint8_t>(kleidicv_resize_linear_u8, 2, 2, state,
                             static_cast<size_t>(channels));
 }
-BENCHMARK(resize_quarter_u8)->Apply(resize_u8_downscale_channels);
+BENCHMARK(resize_quarter_u8)->Apply(resize_quarter_channels);
+
+static void resize_downscale_channels(benchmark::internal::Benchmark* b) {
+  b->ArgNames({"channels"});
+  for (int channel : {1, 2, 3}) {
+    b->Args({channel});
+  }
+}
 
 static void resize_linear_u8_r2(benchmark::State& state) {
   int channels = state.range(0);
   resize_downscale<uint8_t>(kleidicv_resize_linear_u8, 1.7, 2, state,
                             static_cast<size_t>(channels));
 }
-BENCHMARK(resize_linear_u8_r2)->Apply(resize_u8_downscale_channels);
+BENCHMARK(resize_linear_u8_r2)->Apply(resize_downscale_channels);
 
 static void resize_linear_u8_r3(benchmark::State& state) {
   int channels = state.range(0);
   resize_downscale<uint8_t>(kleidicv_resize_linear_u8, 2.7, 2, state,
                             static_cast<size_t>(channels));
 }
-BENCHMARK(resize_linear_u8_r3)->Apply(resize_u8_downscale_channels);
+BENCHMARK(resize_linear_u8_r3)->Apply(resize_downscale_channels);
 
 static void resize_linear_2x2_u8_1ch(benchmark::State& state) {
   resize_upscale<uint8_t>(kleidicv_resize_linear_u8, 2, 2, state);

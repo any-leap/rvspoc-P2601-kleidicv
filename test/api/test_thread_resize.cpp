@@ -5,9 +5,6 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <thread>
-#include <type_traits>
-
 #include "framework/array.h"
 #include "framework/generator.h"
 #include "kleidicv/kleidicv.h"
@@ -23,58 +20,72 @@ class ResizeThread : public testing::TestWithParam<P> {
     size_t dst_width = 0, dst_height = 0, thread_count = 0, channels = 0;
     std::tie(dst_width, dst_height, thread_count, channels) = GetParam();
     check<uint8_t>(kleidicv_resize_linear_u8, kleidicv_thread_resize_linear_u8,
-                   thread_count, 2 * dst_width, 2 * dst_height, 1, dst_width,
-                   dst_height);
+                   thread_count, 2 * dst_width, 2 * dst_height, channels,
+                   dst_width, dst_height);
   }
   void test_resize_u8_2x2() {
     size_t src_width = 0, src_height = 0, thread_count = 0, channels = 0;
     std::tie(src_width, src_height, thread_count, channels) = GetParam();
-    check<uint8_t>(kleidicv_resize_linear_u8, kleidicv_thread_resize_linear_u8,
-                   thread_count, src_width, src_height, 1, 2 * src_width,
-                   2 * src_height);
+    if (channels <= 1) {
+      check<uint8_t>(kleidicv_resize_linear_u8,
+                     kleidicv_thread_resize_linear_u8, thread_count, src_width,
+                     src_height, channels, 2 * src_width, 2 * src_height);
+    }
   }
   void test_resize_u8_4x4() {
     size_t src_width = 0, src_height = 0, thread_count = 0, channels = 0;
     std::tie(src_width, src_height, thread_count, channels) = GetParam();
-    check<uint8_t>(kleidicv_resize_linear_u8, kleidicv_thread_resize_linear_u8,
-                   thread_count, src_width, src_height, 1, 4 * src_width,
-                   4 * src_height);
+    if (channels <= 1) {
+      check<uint8_t>(kleidicv_resize_linear_u8,
+                     kleidicv_thread_resize_linear_u8, thread_count, src_width,
+                     src_height, channels, 4 * src_width, 4 * src_height);
+    }
   }
   void test_resize_u8_down2() {
     size_t width = 0, height = 0, thread_count = 0, channels = 0;
     std::tie(width, height, thread_count, channels) = GetParam();
-    check<uint8_t>(kleidicv_resize_linear_u8, kleidicv_thread_resize_linear_u8,
-                   thread_count, 16 * width, 3 * height, channels, 9 * width,
-                   2 * height);
+    if (channels <= 3) {
+      check<uint8_t>(kleidicv_resize_linear_u8,
+                     kleidicv_thread_resize_linear_u8, thread_count, 16 * width,
+                     3 * height, channels, 9 * width, 2 * height);
+    }
   }
   void test_resize_u8_down3() {
     size_t width = 0, height = 0, thread_count = 0, channels = 0;
     std::tie(width, height, thread_count, channels) = GetParam();
-    check<uint8_t>(kleidicv_resize_linear_u8, kleidicv_thread_resize_linear_u8,
-                   thread_count, 32 * width, 3 * height, channels, 13 * width,
-                   2 * height);
+    if (channels <= 3) {
+      check<uint8_t>(kleidicv_resize_linear_u8,
+                     kleidicv_thread_resize_linear_u8, thread_count, 32 * width,
+                     3 * height, channels, 13 * width, 2 * height);
+    }
   }
 
   void test_resize_f32_2x2() {
     size_t src_width = 0, src_height = 0, thread_count = 0, channels = 0;
     std::tie(src_width, src_height, thread_count, channels) = GetParam();
-    check<float>(kleidicv_resize_linear_f32, kleidicv_thread_resize_linear_f32,
-                 thread_count, src_width, src_height, 1, 2 * src_width,
-                 2 * src_height);
+    if (channels <= 1) {
+      check<float>(kleidicv_resize_linear_f32,
+                   kleidicv_thread_resize_linear_f32, thread_count, src_width,
+                   src_height, channels, 2 * src_width, 2 * src_height);
+    }
   }
   void test_resize_f32_4x4() {
     size_t src_width = 0, src_height = 0, thread_count = 0, channels = 0;
     std::tie(src_width, src_height, thread_count, channels) = GetParam();
-    check<float>(kleidicv_resize_linear_f32, kleidicv_thread_resize_linear_f32,
-                 thread_count, src_width, src_height, 1, 4 * src_width,
-                 4 * src_height);
+    if (channels <= 1) {
+      check<float>(kleidicv_resize_linear_f32,
+                   kleidicv_thread_resize_linear_f32, thread_count, src_width,
+                   src_height, 1, 4 * src_width, 4 * src_height);
+    }
   }
   void test_resize_f32_8x8() {
     size_t src_width = 0, src_height = 0, thread_count = 0, channels = 0;
     std::tie(src_width, src_height, thread_count, channels) = GetParam();
-    check<float>(kleidicv_resize_linear_f32, kleidicv_thread_resize_linear_f32,
-                 thread_count, src_width, src_height, 1, 8 * src_width,
-                 8 * src_height);
+    if (channels <= 1) {
+      check<float>(kleidicv_resize_linear_f32,
+                   kleidicv_thread_resize_linear_f32, thread_count, src_width,
+                   src_height, 1, 8 * src_width, 8 * src_height);
+    }
   }
 
  private:
@@ -100,6 +111,15 @@ class ResizeThread : public testing::TestWithParam<P> {
                   src.data(), src.stride(), src_width, src_height,
                   dst_multi.data(), dst_multi.stride(), dst_width, dst_height,
                   channels, get_multithreading_fake(thread_count)));
+
+    if (dst_single.compare_to(dst_multi)) {
+      std::cout << "source:\n";
+      dump(&src);
+      std::cout << "dst_single:\n";
+      dump(&dst_single);
+      std::cout << "dst_multi:\n";
+      dump(&dst_multi);
+    }
 
     EXPECT_EQ_ARRAY2D(dst_single, dst_multi);
   }
@@ -127,8 +147,8 @@ INSTANTIATE_TEST_SUITE_P(, ResizeThread,
                                          P{1, 2, 2, 1}, P{ 2,  1, 2, 2}, P{ 2,  1, 2, 3},
                                          P{2, 2, 1, 1}, P{ 1,  3, 2, 2},
                                          P{2, 3, 1, 1}, P{ 6,  4, 1, 2}, P{ 6,  4, 1, 3},
-                                         P{4, 5, 2, 1}, P{ 2,  6, 3, 2}, P{ 2,  6, 3, 3},
-                                         P{1, 7, 4, 1}, P{12, 34, 5, 2}, P{12, 34, 5, 3}));
+                                         P{4, 5, 2, 1}, P{ 2,  6, 3, 2}, P{ 2,  6, 3, 3}, P{ 3,  5, 2, 4},
+                                         P{1, 7, 4, 1}, P{12, 34, 5, 2}, P{ 7, 17, 5, 3}, P{11, 19, 3, 4}));
 // clang-format on
 
 TEST(ResizeThreadTest, NotImplemented) {

@@ -52,7 +52,8 @@ float get_threshold(int, size_t) {
 
 template <>
 uint8_t get_threshold(int Factor, size_t channels) {
-  if ((Factor == 500 || Factor == 2000 || Factor == 4000) && (channels == 1)) {
+  if (Factor == 500 ||
+      ((Factor == 2000 || Factor == 4000) && (channels == 1))) {
     return 1;
   }
 
@@ -169,28 +170,33 @@ std::vector<test>& resize_tests_get() {
     TEST("Resize4x4 float32, INTER_LINEAR", (test_resize<4000, CV_HAL_INTER_LINEAR, 5, 16, CV_32FC1>), (exec_resize<4000, CV_HAL_INTER_LINEAR>)),
     TEST("Resize8x8 float32, INTER_LINEAR", (test_resize<8000, CV_HAL_INTER_LINEAR, 5, 16, CV_32FC1>), (exec_resize<8000, CV_HAL_INTER_LINEAR>)),
 
-    TEST("Resize0.5x0.5 uint8, INTER_AREA", (test_resize<500, CV_HAL_INTER_AREA, 5, 32, CV_8UC1>), (exec_resize<500, CV_HAL_INTER_AREA>)),
     TEST("Resize2x2 uint8, INTER_LINEAR", (test_resize<2000, CV_HAL_INTER_LINEAR, 5, 16, CV_8UC1>), (exec_resize<2000, CV_HAL_INTER_LINEAR>)),
     TEST("Resize4x4 uint8, INTER_LINEAR", (test_resize<4000, CV_HAL_INTER_LINEAR, 5, 16, CV_8UC1>), (exec_resize<4000, CV_HAL_INTER_LINEAR>)),
 
+    TEST("Resize0.5x0.5 uint8, INTER_AREA, 1 channel", (test_resize<500, CV_HAL_INTER_AREA, 5, 32, CV_8UC1>), (exec_resize<500, CV_HAL_INTER_AREA>)),
     TEST("Resize0.5x0.5 uint8, INTER_LINEAR, 1 channel", (test_resize<500, CV_HAL_INTER_LINEAR, 5, 32, CV_8UC1>), (exec_resize<500, CV_HAL_INTER_LINEAR>)),
     TEST("Resize0.777x0.777 uint8, INTER_LINEAR, 1 channel", (test_resize<777, CV_HAL_INTER_LINEAR, 21, 64, CV_8UC1>), (exec_resize<777, CV_HAL_INTER_LINEAR>)),
     TEST("Resize0.444x0.444 uint8, INTER_LINEAR, 1 channel", (test_resize<444, CV_HAL_INTER_LINEAR, 21, 64, CV_8UC1>), (exec_resize<444, CV_HAL_INTER_LINEAR>)),
     TEST("Resize0.3x0.3 uint8, INTER_LINEAR, 1 channel", (test_resize_to_third<CV_HAL_INTER_LINEAR, CV_8UC1>), (exec_resize_to_third<CV_HAL_INTER_LINEAR>)),
     TEST("Resize random downscale uint8, INTER_LINEAR, 1 channel", (test_resize_random_scale<CV_HAL_INTER_LINEAR, CV_8UC1>), (exec_resize_random_scale<CV_HAL_INTER_LINEAR>)),
 
+    TEST("Resize0.5x0.5 uint8, INTER_AREA, 2 channels", (test_resize<500, CV_HAL_INTER_AREA, 5, 32, CV_8UC2>), (exec_resize<500, CV_HAL_INTER_AREA>)),
     TEST("Resize0.5x0.5 uint8, INTER_LINEAR, 2 channels", (test_resize<500, CV_HAL_INTER_LINEAR, 5, 32, CV_8UC2>), (exec_resize<500, CV_HAL_INTER_LINEAR>)),
     TEST("Resize0.777x0.777 uint8, INTER_LINEAR, 2 channels", (test_resize<777, CV_HAL_INTER_LINEAR, 21, 64, CV_8UC2>), (exec_resize<777, CV_HAL_INTER_LINEAR>)),
     TEST("Resize0.444x0.444 uint8, INTER_LINEAR, 2 channels", (test_resize<444, CV_HAL_INTER_LINEAR, 21, 64, CV_8UC2>), (exec_resize<444, CV_HAL_INTER_LINEAR>)),
     TEST("Resize0.3x0.3 uint8, INTER_LINEAR, 2 channels", (test_resize_to_third<CV_HAL_INTER_LINEAR, CV_8UC2>), (exec_resize_to_third<CV_HAL_INTER_LINEAR>)),
     TEST("Resize random downscale uint8, INTER_LINEAR, 2 channels", (test_resize_random_scale<CV_HAL_INTER_LINEAR, CV_8UC2>), (exec_resize_random_scale<CV_HAL_INTER_LINEAR>)),
 
+    TEST("Resize0.5x0.5 uint8, INTER_AREA, 3 channels", (test_resize<500, CV_HAL_INTER_AREA, 5, 32, CV_8UC3>), (exec_resize<500, CV_HAL_INTER_AREA>)),
     TEST("Resize0.5x0.5 uint8, INTER_LINEAR, 3 channels", (test_resize<500, CV_HAL_INTER_LINEAR, 5, 32, CV_8UC3>), (exec_resize<500, CV_HAL_INTER_LINEAR>)),
     TEST("Resize0.777x0.777 uint8, INTER_LINEAR, 3 channels", (test_resize<777, CV_HAL_INTER_LINEAR, 21, 64, CV_8UC3>), (exec_resize<777, CV_HAL_INTER_LINEAR>)),
     TEST("Resize0.444x0.444 uint8, INTER_LINEAR, 3 channels", (test_resize<444, CV_HAL_INTER_LINEAR, 21, 64, CV_8UC3>), (exec_resize<444, CV_HAL_INTER_LINEAR>)),
     TEST("Resize0.333x0.333 uint8, INTER_LINEAR, 3 channels", (test_resize_to_third<CV_HAL_INTER_LINEAR, CV_8UC3>), (exec_resize_to_third<CV_HAL_INTER_LINEAR>)),
     TEST("Resize random downscale uint8, INTER_LINEAR, 3 channels", (test_resize_random_scale<CV_HAL_INTER_LINEAR, CV_8UC3>), (exec_resize_random_scale<CV_HAL_INTER_LINEAR>)),
-  };
+
+    TEST("Resize0.5x0.5 uint8, INTER_AREA, 4 channels", (test_resize<500, CV_HAL_INTER_AREA, 5, 32, CV_8UC4>), (exec_resize<500, CV_HAL_INTER_AREA>)),
+    TEST("Resize0.5x0.5 uint8, INTER_LINEAR, 4 channels", (test_resize<500, CV_HAL_INTER_LINEAR, 5, 32, CV_8UC4>), (exec_resize<500, CV_HAL_INTER_LINEAR>)),
+};
   // clang-format on
   return tests;
 }

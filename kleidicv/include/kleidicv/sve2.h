@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 - 2025 Arm Limited and/or its affiliates <open-source-office@arm.com>
+// SPDX-FileCopyrightText: 2023 - 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -377,53 +377,24 @@ class VecTraitsBase : public VectorTypes<ScalarType> {
     }
   }
 
-  // Transforms a single predicate into three other predicates that then can be
-  // used for consecutive operations. The input predicate can only have
-  // consecutive ones starting at the lowest element.
-  static void make_consecutive_predicates(svbool_t pg, svbool_t &pg_0,
-                                          svbool_t &pg_1,
-                                          svbool_t &pg_2) KLEIDICV_STREAMING {
-    // Length of data. Must be signed because of the unconditional subtraction
-    // of fixed values.
-    int64_t length = 3 * svcntp(pg);
-    // Handle up to VL length worth of data with the first predicated operation.
-    pg_0 = svwhilelt(int64_t{0}, length);
-    // Handle up to VL length worth of data with the second predicated operation
-    // taking into account data stored in the first predicated operation.
-    length -= num_lanes();
-    pg_1 = svwhilelt(int64_t{0}, length);
-    // Handle up to VL length worth of data with the second predicated operation
-    // taking into account data stored in the first and second predicated
-    // operations.
-    length -= num_lanes();
-    pg_2 = svwhilelt(int64_t{0}, length);
-  }
+  // Expands a single predicate into multiple predicates for use in consecutive
+  // operations. The input predicate must contain consecutive active lanes
+  // starting from the lowest index. The resulting predicates collectively span
+  // N times the number of lanes in the input predicate, where N is the number
+  // of generated predicates.
+  template <typename... Predicates>
+  static void make_consecutive_predicates(
+      svbool_t pg_single, Predicates &...pg_multi) KLEIDICV_STREAMING {
+    static_assert((std::is_same_v<Predicates, svbool_t> && ...));
+    int64_t length =
+        static_cast<int64_t>(sizeof...(pg_multi)) * svcntp(pg_single);
 
-  // Transforms a single predicate into four other predicates that then can be
-  // used for consecutive operations. The input predicate can only have
-  // consecutive ones starting at the lowest element.
-  static void make_consecutive_predicates(svbool_t pg, svbool_t &pg_0,
-                                          svbool_t &pg_1, svbool_t &pg_2,
-                                          svbool_t &pg_3) KLEIDICV_STREAMING {
-    // Length of data. Must be signed because of the unconditional subtraction
-    // of fixed values.
-    int64_t length = 4 * svcntp(pg);
-    // Handle up to VL length worth of data with the first predicated operation.
-    pg_0 = svwhilelt(int64_t{0}, length);
-    // Handle up to VL length worth of data with the second predicated operation
-    // taking into account data stored in the first predicated operation.
-    length -= num_lanes();
-    pg_1 = svwhilelt(int64_t{0}, length);
-    // Handle up to VL length worth of data with the second predicated operation
-    // taking into account data stored in the first and second predicated
-    // operations.
-    length -= num_lanes();
-    pg_2 = svwhilelt(int64_t{0}, length);
-    // Handle up to VL length worth of data with the third predicated operation
-    // taking into account data stored in the first, second and third predicated
-    // operations.
-    length -= num_lanes();
-    pg_3 = svwhilelt(int64_t{0}, length);
+    auto assign = [&](svbool_t &out) {
+      out = svwhilelt(int64_t{0}, length);
+      length -= static_cast<int64_t>(num_lanes());
+    };
+
+    (assign(pg_multi), ...);
   }
 };  // end of class VecTraitsBase<ScalarType>
 

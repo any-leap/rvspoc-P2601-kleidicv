@@ -42,60 +42,41 @@ class ResizeToQuarterTest final {
     calculate_expected(source, expected);
 
     ASSERT_EQ(KLEIDICV_OK, kleidicv_resize_linear_u8(
-                               source.data(), source.stride(), source.width(),
-                               source.height(), actual.data(), actual.stride(),
-                               actual.width(), actual.height(), 1));
+                               source.data(), source.stride(), src_width,
+                               src_height, actual.data(), actual.stride(),
+                               dst_width, dst_height, channels_));
+
+    if (expected.compare_to(actual)) {
+      std::cout << "source:\n";
+      dump(&source);
+      std::cout << "expected:\n";
+      dump(&expected);
+      std::cout << "actual:\n";
+      dump(&actual);
+    }
 
     EXPECT_EQ_ARRAY2D(actual, expected);
   }
 
  private:
-  // Calculates average value of 2x2 window with respect to array boundaries.
-  void fill_from_window(test::Array2D<uint8_t> &src,
-                        test::Array2D<uint8_t> &dst, size_t src_row,
-                        size_t src_col, size_t dst_row, size_t dst_col) const {
-    for (size_t channel = 0; channel < channels_; ++channel) {
-      uint16_t value = 0;
-      uint8_t divider = 1;
-
-      // Top-left corner, always present
-      value = *src.at(src_row, src_col + channel);
-      // Top-right corner
-      if (src_col + channels_ < src.width()) {
-        value += *src.at(src_row, src_col + channels_ + channel);
-        divider++;
-      }
-      // Bottom-left corner
-      if (src_row + 1 < src.height()) {
-        value += *src.at(src_row + 1, src_col + channel);
-        divider++;
-      }
-      // Bottom-right corner
-      if (src_row + 1 < src.height() && src_col + channels_ < src.width()) {
-        value += *src.at(src_row + 1, src_col + channels_ + channel);
-        divider++;
-      }
-
-      // Rounding division
-      *dst.at(dst_row, dst_col + channel) =
-          static_cast<uint8_t>((value + (divider / 2)) / divider);
-    }
-  }
-
   void calculate_expected(test::Array2D<uint8_t> &src,
                           test::Array2D<uint8_t> &expected) const {
-    size_t src_vindex = 0;
-    size_t src_hindex = 0;
+    for (size_t dst_row = 0; dst_row < expected.height(); ++dst_row) {
+      const size_t src_row = dst_row * 2;
+      size_t src_idx = 0;
 
-    for (size_t exp_vindex = 0; exp_vindex < expected.height(); exp_vindex++) {
-      for (size_t exp_hindex = 0; exp_hindex < expected.width();
-           exp_hindex += channels_) {
-        fill_from_window(src, expected, src_vindex, src_hindex, exp_vindex,
-                         exp_hindex);
-        src_hindex += 2 * channels_;
+      for (size_t dst_idx = 0; dst_idx < expected.width();
+           dst_idx += channels_, src_idx += 2 * channels_) {
+        for (size_t channel = 0; channel < channels_; ++channel) {
+          uint16_t value = *src.at(src_row, src_idx + channel) +
+                           *src.at(src_row, src_idx + channels_ + channel) +
+                           *src.at(src_row + 1, src_idx + channel) +
+                           *src.at(src_row + 1, src_idx + channels_ + channel);
+
+          *expected.at(dst_row, dst_idx + channel) =
+              static_cast<uint8_t>((value + 2) / 4);
+        }
       }
-      src_vindex += 2;
-      src_hindex = 0;
     }
   }
 
@@ -103,12 +84,10 @@ class ResizeToQuarterTest final {
   size_t padding_;
 };
 
-// Test basic dimension cases without padding
-TEST(ResizeToQuarter, EvenDimsNoPadding) {
-  // For now resize only reasonably supports single-channel data
+TEST(ResizeToQuarter, Channels1NoPadding) {
   ResizeToQuarterTest resize_test(1, 0);
 
-  size_t src_width = 4 * test::Options::vector_lanes<uint8_t>();
+  size_t src_width = 5 * test::Options::vector_lanes<uint8_t>() + 2;
   // Set height to at least double 2x2 window height
   size_t src_height = 4;
   size_t dst_width = src_width / 2;
@@ -116,12 +95,76 @@ TEST(ResizeToQuarter, EvenDimsNoPadding) {
   resize_test.execute_test(src_width, src_height, dst_width, dst_height);
 }
 
-// The rest of tests are done with padding since this is a more elaborate case
-TEST(ResizeToQuarter, EvenDims) {
-  // For now resize only reasonably supports single-channel data
+TEST(ResizeToQuarter, Channels1Padding) {
   ResizeToQuarterTest resize_test(1, 1);
 
-  size_t src_width = 4 * test::Options::vector_lanes<uint8_t>();
+  size_t src_width = 5 * test::Options::vector_lanes<uint8_t>() + 2;
+  // Set height to at least double 2x2 window height
+  size_t src_height = 4;
+  size_t dst_width = src_width / 2;
+  size_t dst_height = src_height / 2;
+  resize_test.execute_test(src_width, src_height, dst_width, dst_height);
+}
+
+TEST(ResizeToQuarter, Channels2NoPadding) {
+  ResizeToQuarterTest resize_test(2, 0);
+
+  size_t src_width = 3 * test::Options::vector_lanes<uint8_t>() + 2;
+  // Set height to at least double 2x2 window height
+  size_t src_height = 4;
+  size_t dst_width = src_width / 2;
+  size_t dst_height = src_height / 2;
+  resize_test.execute_test(src_width, src_height, dst_width, dst_height);
+}
+
+TEST(ResizeToQuarter, Channels2Padding) {
+  ResizeToQuarterTest resize_test(2, 1);
+
+  size_t src_width = 3 * test::Options::vector_lanes<uint8_t>() + 2;
+  // Set height to at least double 2x2 window height
+  size_t src_height = 4;
+  size_t dst_width = src_width / 2;
+  size_t dst_height = src_height / 2;
+  resize_test.execute_test(src_width, src_height, dst_width, dst_height);
+}
+
+TEST(ResizeToQuarter, Channels3NoPadding) {
+  ResizeToQuarterTest resize_test(3, 0);
+
+  size_t src_width = 3 * test::Options::vector_lanes<uint8_t>() + 2;
+  // Set height to at least double 2x2 window height
+  size_t src_height = 4;
+  size_t dst_width = src_width / 2;
+  size_t dst_height = src_height / 2;
+  resize_test.execute_test(src_width, src_height, dst_width, dst_height);
+}
+
+TEST(ResizeToQuarter, Channels3Padding) {
+  ResizeToQuarterTest resize_test(3, 1);
+
+  size_t src_width = 3 * test::Options::vector_lanes<uint8_t>() + 2;
+  // Set height to at least double 2x2 window height
+  size_t src_height = 4;
+  size_t dst_width = src_width / 2;
+  size_t dst_height = src_height / 2;
+  resize_test.execute_test(src_width, src_height, dst_width, dst_height);
+}
+
+TEST(ResizeToQuarter, Channels4NoPadding) {
+  ResizeToQuarterTest resize_test(4, 0);
+
+  size_t src_width = 3 * test::Options::vector_lanes<uint8_t>() + 2;
+  // Set height to at least double 2x2 window height
+  size_t src_height = 4;
+  size_t dst_width = src_width / 2;
+  size_t dst_height = src_height / 2;
+  resize_test.execute_test(src_width, src_height, dst_width, dst_height);
+}
+
+TEST(ResizeToQuarter, Channels4Padding) {
+  ResizeToQuarterTest resize_test(4, 1);
+
+  size_t src_width = 3 * test::Options::vector_lanes<uint8_t>() + 2;
   // Set height to at least double 2x2 window height
   size_t src_height = 4;
   size_t dst_width = src_width / 2;

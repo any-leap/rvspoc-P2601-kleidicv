@@ -102,7 +102,10 @@ Erode3x3:    opencv_perf_imgproc '*Erode_big.big/*'  '($PIXEL_FORMAT, 8UC1, 3)'
 Erode5x5:    opencv_perf_imgproc '*Erode_big.big/*'  '($PIXEL_FORMAT, 8UC1, 5)'
 Erode17x17:  opencv_perf_imgproc '*Erode_big.big/*'  '($PIXEL_FORMAT, 8UC1, 17)'
 
-Resize_0.5_8b:   opencv_perf_imgproc '*ResizeAreaFast/*' '(8UC1, $PIXEL_FORMAT, 2)'
+Resize_0.5_8b:      opencv_perf_imgproc '*ResizeAreaFast/*' '(8UC1, $PIXEL_FORMAT, 2)'
+Resize_0.5_8b_2ch:  opencv_perf_imgproc '*ResizeAreaFast/*' '(8UC2, $PIXEL_FORMAT, 2)'
+Resize_0.5_8b_3ch:  opencv_perf_imgproc '*ResizeAreaFast/*' '(8UC3, $PIXEL_FORMAT, 2)'
+Resize_0.5_8b_4ch:  opencv_perf_imgproc '*ResizeAreaFast/*' '(8UC4, $PIXEL_FORMAT, 2)'
 
 Scale:           opencv_perf_core '*convertTo/*' '($PIXEL_FORMAT, 8UC1,  8UC1,  1, 1.234, 4.567)'
 Scale_float_1.0: opencv_perf_core '*convertTo/*' '($PIXEL_FORMAT, 32FC1, 32FC1, 1, 1,     4.567)'

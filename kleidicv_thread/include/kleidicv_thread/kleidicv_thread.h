@@ -411,7 +411,8 @@ kleidicv_error_t kleidicv_thread_scharr_interleaved_s16_u8(
 /// documentation of that function for more details.
 kleidicv_error_t kleidicv_thread_resize_to_quarter_u8(
     const uint8_t *src, size_t src_stride, size_t src_width, size_t src_height,
-    uint8_t *dst, size_t dst_stride, kleidicv_thread_multithreading);
+    uint8_t *dst, size_t dst_stride, size_t channels,
+    kleidicv_thread_multithreading);
 
 /// Internal - not part of the public API and its direct use is not supported.
 ///
