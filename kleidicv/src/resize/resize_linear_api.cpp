@@ -22,6 +22,18 @@ KLEIDICV_DEFINE_C_API_ALL(kleidicv_resize_4x4_stripe_u8,
                           kleidicv_resize_4x4_stripe_u8);
 
 KLEIDICV_MULTIVERSION_C_API_VECLEN(
+    kleidicv_resize_1ch_r1_stripe_u8,
+    (&kleidicv::neon::kleidicv_resize_generic_stripe_u8<1, 1>), nullptr,
+    nullptr, nullptr, 16, 64);
+KLEIDICV_MULTIVERSION_C_API_VECLEN(
+    kleidicv_resize_2ch_r1_stripe_u8,
+    (&kleidicv::neon::kleidicv_resize_generic_stripe_u8<1, 2>), nullptr,
+    nullptr, nullptr, 16, 64);
+KLEIDICV_MULTIVERSION_C_API_VECLEN(
+    kleidicv_resize_3ch_r1_stripe_u8,
+    (&kleidicv::neon::kleidicv_resize_generic_stripe_u8<1, 3>), nullptr,
+    nullptr, nullptr, 16, 64);
+KLEIDICV_MULTIVERSION_C_API_VECLEN(
     kleidicv_resize_1ch_r2_stripe_u8,
     (&kleidicv::neon::kleidicv_resize_generic_stripe_u8<2, 1>),
     (&kleidicv::sve2::kleidicv_resize_generic_stripe_u8<2, 1>),
@@ -126,6 +138,18 @@ kleidicv_error_t resize_linear_stripe_u8(const uint8_t *src, size_t src_stride,
                                            dst_stride);
     }
 
+    // Upscale
+    if (dst_width >= src_width) {
+      if constexpr (kUseSME) {
+        return kleidicv_resize_1ch_r1_stripe_u8_sme(
+            src, src_stride, src_width, src_height, y_begin, y_end, dst,
+            dst_stride, dst_width, dst_height);
+      }
+      return kleidicv_resize_1ch_r1_stripe_u8(
+          src, src_stride, src_width, src_height, y_begin, y_end, dst,
+          dst_stride, dst_width, dst_height);
+    }
+
     if (dst_width * 2 >= src_width) {
       if constexpr (kUseSME) {
         return kleidicv_resize_1ch_r2_stripe_u8_sme(
@@ -147,6 +171,16 @@ kleidicv_error_t resize_linear_stripe_u8(const uint8_t *src, size_t src_stride,
   }
 
   if (channels == 2) {
+    if (dst_width >= src_width) {
+      if constexpr (kUseSME) {
+        return kleidicv_resize_2ch_r1_stripe_u8_sme(
+            src, src_stride, src_width, src_height, y_begin, y_end, dst,
+            dst_stride, dst_width, dst_height);
+      }
+      return kleidicv_resize_2ch_r1_stripe_u8(
+          src, src_stride, src_width, src_height, y_begin, y_end, dst,
+          dst_stride, dst_width, dst_height);
+    }
     if (dst_width * 2 >= src_width) {
       if constexpr (kUseSME) {
         return kleidicv_resize_2ch_r2_stripe_u8_sme(
@@ -168,6 +202,16 @@ kleidicv_error_t resize_linear_stripe_u8(const uint8_t *src, size_t src_stride,
   }
 
   assert(channels == 3);
+  if (dst_width >= src_width) {
+    if constexpr (kUseSME) {
+      return kleidicv_resize_3ch_r1_stripe_u8_sme(
+          src, src_stride, src_width, src_height, y_begin, y_end, dst,
+          dst_stride, dst_width, dst_height);
+    }
+    return kleidicv_resize_3ch_r1_stripe_u8(src, src_stride, src_width,
+                                            src_height, y_begin, y_end, dst,
+                                            dst_stride, dst_width, dst_height);
+  }
   double inverse_scale =
       static_cast<double>(src_width) / static_cast<double>(dst_width);
   // Loading 3 vectors and TBL3 is faster than loading extra lanes
@@ -218,9 +262,13 @@ kleidicv_error_t resize_linear_u8(const uint8_t *src, size_t src_stride,
     return KLEIDICV_ERROR_NOT_IMPLEMENTED;
   }
 
-  // For upsampling, process by src rows
-  // For resize_generic, process by dst rows
-  size_t y_end = (src_width < dst_width) ? src_height : dst_height;
+  // The exact 2x2 and 4x4 upsampling kernels iterate over source rows,
+  // while the generic resize kernels iterate over destination rows.
+  const bool process_by_src_rows =
+      channels == 1 &&
+      ((src_width * 2 == dst_width && src_height * 2 == dst_height) ||
+       (src_width * 4 == dst_width && src_height * 4 == dst_height));
+  size_t y_end = process_by_src_rows ? src_height : dst_height;
 
   return resize_linear_stripe_u8<kUseSME>(src, src_stride, src_width,
                                           src_height, 0, y_end, dst, dst_stride,

@@ -43,7 +43,7 @@ kleidicv_error_t kleidicv_resize_generic_stripe_u8(
       // the table lookup overindexes the src registers
       resize_linear_generic_u8::ResizeGenericU8Operation<kRatio, kChannels,
                                                          true>
-          operation(src, src_stride, src_height, y_begin, y_end, dst,
+          operation(src, src_stride, src_width, src_height, y_begin, y_end, dst,
                     dst_stride, dst_height);
       operation.process_rows(row_interpolation_constants);
       return KLEIDICV_OK;
@@ -51,8 +51,8 @@ kleidicv_error_t kleidicv_resize_generic_stripe_u8(
   }
 
   resize_linear_generic_u8::ResizeGenericU8Operation<kRatio, kChannels>
-      operation(src, src_stride, src_height, y_begin, y_end, dst, dst_stride,
-                dst_height);
+      operation(src, src_stride, src_width, src_height, y_begin, y_end, dst,
+                dst_stride, dst_height);
   operation.process_rows(row_interpolation_constants);
 
   return KLEIDICV_OK;
@@ -65,6 +65,9 @@ kleidicv_error_t kleidicv_resize_generic_stripe_u8(
       size_t src_height, size_t y_begin, size_t y_end, uint8_t *dst, \
       size_t dst_stride, size_t dst_width, size_t dst_height)
 
+KLEIDICV_INSTANTIATE_TEMPLATE(1, 1);
+KLEIDICV_INSTANTIATE_TEMPLATE(1, 2);
+KLEIDICV_INSTANTIATE_TEMPLATE(1, 3);
 KLEIDICV_INSTANTIATE_TEMPLATE(2, 1);
 KLEIDICV_INSTANTIATE_TEMPLATE(2, 2);
 KLEIDICV_INSTANTIATE_TEMPLATE(2, 3);

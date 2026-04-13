@@ -21,7 +21,9 @@ static std::pair<std::vector<FullVectorInterpolationConstants>,
                  std::vector<HalfVectorInterpolationConstants>>
 reference_interpolation_constants(size_t src_width, size_t dst_width) {
   auto to_src_x = [src_width, dst_width](uint64_t dx) {
-    return aligned_scale(dx, src_width, dst_width);
+    return aligned_scale(static_cast<int64_t>(dx),
+                         static_cast<int64_t>(src_width),
+                         static_cast<int64_t>(dst_width));
   };
 
   size_t two_x = 0;
@@ -191,6 +193,10 @@ TEST(GenericResize_u8, rounding_div) {
   EXPECT_EQ(1, kleidicv::neon::resize_linear_generic_u8::rounding_div(4, 5));
 }
 
+TEST(GenericResize_u8_Generator, 1channel_r1_short) {
+  kleidicv::neon::resize_linear_generic_u8::generator_test<1, 9, 10>();
+}
+
 TEST(GenericResize_u8_Generator, 1channel_r2_short) {
   kleidicv::neon::resize_linear_generic_u8::generator_test<1, 29, 15>();
 }
@@ -205,6 +211,10 @@ TEST(GenericResize_u8_Generator, 1channel_r3_short) {
 
 TEST(GenericResize_u8_Generator, 1channel_r3_long) {
   kleidicv::neon::resize_linear_generic_u8::generator_test<1, 49, 17>();
+}
+
+TEST(GenericResize_u8_Generator, 2channels_r1_short) {
+  kleidicv::neon::resize_linear_generic_u8::generator_test<2, 9, 10>();
 }
 
 TEST(GenericResize_u8_Generator, 2channels_two_x_only_no_pullback) {
@@ -233,6 +243,10 @@ TEST(GenericResize_u8_Generator, 2channels_r3_short) {
 
 TEST(GenericResize_u8_Generator, 3channels_half_only_with_pullback) {
   kleidicv::neon::resize_linear_generic_u8::generator_test<3, 11, 5>();
+}
+
+TEST(GenericResize_u8_Generator, 3channels_r1_short) {
+  kleidicv::neon::resize_linear_generic_u8::generator_test<3, 9, 10>();
 }
 
 TEST(GenericResize_u8_Generator, 3channels_r2_long) {
