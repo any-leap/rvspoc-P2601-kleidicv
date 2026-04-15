@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <utility>
 #include <variant>
@@ -872,9 +873,10 @@ class ResizeGenericU8Operation final {
     using SrcVecType =
         std::conditional_t<(kRatio == 1 || kRatio == 2) && kChannels != 3,
                            uint8x16_t, uint8x16x2_t>;
-    SrcVecType topsrc, bottomsrc;
-    VecTraits<uint8_t>::load(&src_top[src_element_index], topsrc);
-    VecTraits<uint8_t>::load(&src_bottom[src_element_index], bottomsrc);
+    SrcVecType topsrc =
+        load_bounded_src_vector<SrcVecType>(src_top, src_element_index);
+    SrcVecType bottomsrc =
+        load_bounded_src_vector<SrcVecType>(src_bottom, src_element_index);
 
     uint8x8_t a, b, c, d;
     if constexpr ((kRatio == 1 || kRatio == 2) && kChannels != 3) {
@@ -895,6 +897,29 @@ class ResizeGenericU8Operation final {
     uint8x8_t res = vraddhn_u16(vshll_n_u8(left, 8),
                                 vmulq_u16(vsubl_u8(right, left), vsxfrac));
     return res;
+  }
+
+  template <typename SrcVecType>
+  SrcVecType load_bounded_src_vector(const uint8_t *src_row,
+                                     ptrdiff_t src_element_index) const {
+    constexpr size_t kReadSize = sizeof(SrcVecType);
+    SrcVecType src_vec{};
+    const ptrdiff_t remaining_row_elements = std::max<ptrdiff_t>(
+        static_cast<ptrdiff_t>(src_width_ * kChannels) - src_element_index, 0);
+    if (static_cast<size_t>(remaining_row_elements) >= kReadSize) {
+      VecTraits<uint8_t>::load(&src_row[src_element_index], src_vec);
+      return src_vec;
+    }
+
+    // Keep the table lookup in-bounds when the final row is shorter than the
+    // raw NEON load width.
+    alignas(16) uint8_t src_tmp[kReadSize]{};
+    if (remaining_row_elements > 0) {
+      std::memcpy(src_tmp, &src_row[src_element_index],
+                  static_cast<size_t>(remaining_row_elements));
+    }
+    VecTraits<uint8_t>::load(src_tmp, src_vec);
+    return src_vec;
   }
 
   uint8x16_t vector_path(const FullVectorInterpolationConstants &constants,
