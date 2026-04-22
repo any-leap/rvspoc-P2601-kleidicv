@@ -54,6 +54,7 @@ class SmallBuffer {
   }
 
   T *get() { return ptr_; }
+  const T *get() const { return ptr_; }
 
  private:
   static constexpr size_t kInlineSize = SizeOnStack == 0 ? 1 : SizeOnStack;

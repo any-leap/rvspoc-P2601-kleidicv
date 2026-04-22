@@ -32,7 +32,7 @@ their supported parameter constraints.
 | Filters     | `cv::GaussianBlur`, `cv::Sobel`, `cv::medianBlur`, `cv::sepFilter2D` |
 | Morphology  | `cv::dilate`, `cv::erode` |
 | Resize      | `cv::resize`, `cv::pyrDown`, `cv::buildOpticalFlowPyramid` |
-| Transform   | `cv::transpose`, `cv::rotate`, `cv::remap`, `cv::warpPerspective` |
+| Transform   | `cv::copyMakeBorder`, `cv::transpose`, `cv::rotate`, `cv::remap`, `cv::warpPerspective` |
 
 Detailed per-API behavior and parameter constraints are documented in
 the Modules section below.
@@ -410,6 +410,22 @@ Notes on parameters:
 ### Transform
 
 Geometric transform operations in the OpenCV HAL.
+
+#### [`cv::copyMakeBorder()`](https://docs.opencv.org/4.13.0/d2/de8/group__core__array.html#gaa0c0f1c6f151c3bd03ee0b9958d5b8c7)
+Copies the source image into the destination and fills the destination border.
+
+Notes on parameters:
+
+* `borderType` - supported [OpenCV border types](https://docs.opencv.org/4.13.0/d2/de8/group__core__array.html#ga209f2f4869e304c82d07739337eae7c5) are:
+
+  - `cv::BORDER_CONSTANT`
+  - `cv::BORDER_REPLICATE`
+  - `cv::BORDER_REFLECT`
+  - `cv::BORDER_WRAP`
+  - `cv::BORDER_REFLECT_101`
+  - each of the above optionally OR-ed with `cv::BORDER_ISOLATED`
+* `value` - only used with `cv::BORDER_CONSTANT`. For images with more than 4 channels, the 4 scalar components must
+  all be equal.
 
 #### [`cv::transpose()`](https://docs.opencv.org/4.10.0/d2/de8/group__core__array.html#ga46630ed6c0ea6254a35f447289bd7404)
 Transposes a matrix.

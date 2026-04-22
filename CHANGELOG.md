@@ -17,6 +17,7 @@ This changelog aims to follow the guiding principles of
 
 ### Added
 - Rotate +-90 and transpose support for 3-channel images.
+- Neon implementation of add padding by copy.
 
 ## 26.03 - 2026-03-26
 

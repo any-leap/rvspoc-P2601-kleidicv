@@ -34,8 +34,10 @@ std::vector<test>& rgb_to_yuv_422_tests_get();
 std::vector<test>& standalone_lucas_kanade_alg_tests_get();
 std::vector<test>& rotate_tests_get();
 std::vector<test>& transpose_tests_get();
+std::vector<test>& add_padding_by_copy_tests_get();
 
 #if MANAGER
+std::vector<manager_only_test>& add_padding_by_copy_manager_only_tests_get();
 std::vector<manager_only_test>& build_optical_flow_pyr_lk_pyramid_tests_get();
 std::vector<manager_only_test>& calc_optical_flow_pyr_lk_tests_get();
 #endif

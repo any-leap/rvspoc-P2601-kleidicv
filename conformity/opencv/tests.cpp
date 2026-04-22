@@ -49,11 +49,13 @@ std::vector<test> all_tests = merge_tests({
     standalone_lucas_kanade_alg_tests_get,
     rotate_tests_get,
     transpose_tests_get,
+    add_padding_by_copy_tests_get,
 });
 
 #if MANAGER
 
 std::vector<manager_only_test> all_manager_only_tests = merge_tests({
+    add_padding_by_copy_manager_only_tests_get,
     build_optical_flow_pyr_lk_pyramid_tests_get,
     calc_optical_flow_pyr_lk_tests_get,
 });

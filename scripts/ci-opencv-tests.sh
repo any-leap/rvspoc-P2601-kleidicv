@@ -17,12 +17,32 @@ if [[ $(dpkg --print-architecture) = arm64 ]]; then
   : "${OPENCV_VERSION:=4.13.0}"
   : "${OPENCV_URL:=/opt/opencv-${OPENCV_VERSION}.tar.gz}"
 
-  # Try to build unpatched OpenCV with KleidiCV.
-  rm -rf build/ci/unpatched-opencv*
-  mkdir -p build/ci/unpatched-opencv-src
-  tar -xzf "${OPENCV_URL}" -C build/ci/unpatched-opencv-src
-  BUILD_ID="ci/unpatched-opencv" \
-  OPENCV_PATH="$(pwd)/build/ci/unpatched-opencv-src/opencv-${OPENCV_VERSION}" \
+  # Build OpenCV with the same patch set used by the conformity checks so
+  # the CI path exercises the same KleidiCV/OpenCV integration surface.
+  OPENCV_PATCH_VERSION="${OPENCV_VERSION%.*}"
+  OPENCV_BUILD_ID="ci/opencv-patched"
+  OPENCV_SRC_ROOT="build/ci/opencv-patched-src"
+  OPENCV_SRC_PATH="$(pwd)/${OPENCV_SRC_ROOT}/opencv-${OPENCV_VERSION}"
+
+  rm -rf build/ci/opencv-patched*
+  mkdir -p "${OPENCV_SRC_ROOT}"
+  tar -xzf "${OPENCV_URL}" -C "${OPENCV_SRC_ROOT}"
+
+  OPENCV_PATCH_FILES=(
+    "$(pwd)/adapters/opencv/opencv-${OPENCV_PATCH_VERSION}.patch"
+    "$(pwd)/conformity/opencv/opencv-${OPENCV_PATCH_VERSION}-copymakeborder.patch"
+  )
+
+  pushd "${OPENCV_SRC_PATH}"
+  for patch_file in "${OPENCV_PATCH_FILES[@]}"; do
+    if [[ -f "${patch_file}" ]] && grep -qvE '^(//|$)' "${patch_file}"; then
+      patch -p1 -i "${patch_file}"
+    fi
+  done
+  popd
+
+  BUILD_ID="${OPENCV_BUILD_ID}" \
+  OPENCV_PATH="${OPENCV_SRC_PATH}" \
   CMAKE_EXE_LINKER_FLAGS="--rtlib=compiler-rt -fuse-ld=lld" \
   EXTRA_CMAKE_ARGS="\
     -DBUILD_SHARED_LIBS=OFF \
@@ -100,6 +120,7 @@ if [[ $(dpkg --print-architecture) = arm64 ]]; then
     '*Imgproc_Remap*'
     '*Imgproc_MedianBlur*'
     '*Imgproc_Warp*'
+    '*Imgproc_CopyMakeBorder*'
   )
   IMGPROC_TEST_PATTERNS_STR="$(join_strings_with_colon "${IMGPROC_TEST_PATTERNS[*]}")"
   ../../../conformity/opencv_kleidicv/bin/opencv_test_imgproc \
@@ -122,6 +143,7 @@ if [[ $(dpkg --print-architecture) = arm64 ]]; then
     '*Core_Array*'
     'Compare*'
     '*Core_InRangeS/*'
+    '*Core_Mat.copyMakeBoderUndefinedBehavior*'
   )
   CORE_TEST_PATTERNS_STR="$(join_strings_with_colon "${CORE_TEST_PATTERNS[*]}")"
   ../../../conformity/opencv_kleidicv/bin/opencv_test_core \

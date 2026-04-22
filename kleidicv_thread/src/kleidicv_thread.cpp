@@ -11,6 +11,7 @@
 #include <limits>
 #include <vector>
 
+#include "../../kleidicv/src/transform/add_padding_by_copy_internal.h"
 #include "kleidicv/arithmetics/scale.h"
 #include "kleidicv/conversions/rgb_to_yuv.h"
 #include "kleidicv/conversions/yuv_to_rgb.h"
@@ -301,6 +302,28 @@ kleidicv_error_t kleidicv_thread_rotate(const void *src, size_t src_stride,
         dst_stride, angle, pixel_size);
   };
   return parallel_batches(callback, mt, width, 64);
+}
+
+kleidicv_error_t kleidicv_thread_add_padding_by_copy(
+    const void *src, size_t src_stride, void *dst, size_t dst_stride,
+    size_t src_width, size_t src_height, size_t top_padding,
+    size_t bottom_padding, size_t left_padding, size_t right_padding,
+    size_t pixel_size, kleidicv_border_type_t border_type,
+    const void *border_value, kleidicv_thread_multithreading mt) {
+  auto prepared_state = kleidicv_build_add_padding_by_copy_border_buffer(
+      src, src_stride, dst, dst_stride, src_width, src_height, top_padding,
+      bottom_padding, left_padding, right_padding, pixel_size, border_type,
+      border_value);
+  if (prepared_state.error != KLEIDICV_OK) {
+    return prepared_state.error;
+  }
+
+  auto callback = [&prepared_state](unsigned begin, unsigned end) {
+    return kleidicv_add_padding_by_copy_stripe(&prepared_state, begin, end);
+  };
+
+  return parallel_batches(callback, mt,
+                          static_cast<unsigned>(prepared_state.dst_height), 4);
 }
 
 kleidicv_error_t kleidicv_thread_yuv_to_rgb_u8(

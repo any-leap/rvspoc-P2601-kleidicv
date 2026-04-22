@@ -15,11 +15,15 @@ set(OPENCV_URL "https://github.com/opencv/opencv/archive/refs/tags/${OPENCV_VERS
 # Remove the last part of the version number (e.g., 4.9.0 -> 4.9)
 string(REGEX REPLACE "\.[^\.]+$" "" OPENCV_PATCH_VERSION ${OPENCV_VERSION})
 
-# List of patch files to apply (add new patches here).
+# List of patch files to apply. Keep the base adapter patch explicit and
+# collect any version-specific conformity patches automatically.
 set(OPENCV_PATCH_FILES
-    "${CMAKE_CURRENT_LIST_DIR}/../../adapters/opencv/opencv-${OPENCV_PATCH_VERSION}.patch"
-    "${CMAKE_CURRENT_LIST_DIR}/opencv-${OPENCV_PATCH_VERSION}-gaussianblur.patch"
-    "${CMAKE_CURRENT_LIST_DIR}/opencv-${OPENCV_PATCH_VERSION}-fast-math-rounding.patch")
+    "${CMAKE_CURRENT_LIST_DIR}/../../adapters/opencv/opencv-${OPENCV_PATCH_VERSION}.patch")
+
+file(GLOB OPENCV_VERSIONED_PATCH_FILES CONFIGURE_DEPENDS
+     "${CMAKE_CURRENT_LIST_DIR}/opencv-${OPENCV_PATCH_VERSION}-*.patch")
+list(SORT OPENCV_VERSIONED_PATCH_FILES)
+list(APPEND OPENCV_PATCH_FILES ${OPENCV_VERSIONED_PATCH_FILES})
 
 # Check if a patch file has non-comment content.
 function(patch_has_content patch_file result_var)

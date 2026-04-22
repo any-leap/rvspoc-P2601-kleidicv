@@ -177,6 +177,7 @@ Geometric transform operations.
 |-------------------------------|-------|--------|--------|--------|--------|--------|
 | Transpose                     |   x   |    x   |    x   |    x   |    x   |    x   |
 | Rotate (+-90 degrees)         |   x   |    x   |    x   |    x   |    x   |    x   |
+| Add padding by copy           |   x   |    x   |    x   |    x   |    x   |    x   |
 
 ### Remap
 

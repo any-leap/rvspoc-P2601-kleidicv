@@ -2572,6 +2572,52 @@ KLEIDICV_API_DECLARATION(kleidicv_rotate, const void *src, size_t src_stride,
                          size_t width, size_t height, void *dst,
                          size_t dst_stride, int angle, size_t pixel_size);
 
+/// Copies the source image into the destination and fills the destination
+/// border according to the specified border mode.
+///
+/// This API expects `src` to point at the effective source region already.
+/// In other words, if a higher level caller wants to borrow pixels from a
+/// parent image for non-isolated ROI handling, that normalization must happen
+/// before calling this function.
+///
+/// The destination size is derived as:
+///   - `dst_width  = src_width  + left_padding + right_padding`
+///   - `dst_height = src_height + top_padding  + bottom_padding`
+///
+/// The synthesized destination dimensions must also satisfy:
+///   - `src_width + left_padding + right_padding <= KLEIDICV_MAX_IMAGE_PIXELS`
+///   - `src_height + top_padding + bottom_padding <= KLEIDICV_MAX_IMAGE_PIXELS`
+///
+/// Note, the supported border types are:
+///                       - @ref KLEIDICV_BORDER_TYPE_CONSTANT
+///                       - @ref KLEIDICV_BORDER_TYPE_REPLICATE
+///                       - @ref KLEIDICV_BORDER_TYPE_REFLECT
+///                       - @ref KLEIDICV_BORDER_TYPE_WRAP
+///                       - @ref KLEIDICV_BORDER_TYPE_REVERSE
+///
+/// @param src            Pointer to the source data. Must be non-null.
+/// @param src_stride     Distance in bytes from the start of one row to the
+///                       start of the next row in the source data.
+/// @param dst            Pointer to the destination data. Must be non-null.
+/// @param dst_stride     Distance in bytes from the start of one row to the
+///                       start of the next row in the destination data.
+/// @param src_width      Number of columns in the data.
+/// @param src_height     Number of rows in the data.
+/// @param top_padding    Number of rows in the top padding.
+/// @param bottom_padding Number of rows in the bottom padding.
+/// @param left_padding   Number of columns in the left padding.
+/// @param right_padding  Number of columns in the right padding.
+/// @param pixel_size     Size of one pixel in bytes. Must be greater than 0.
+/// @param border_type    Way of handling the border.
+/// @param border_value   Pointer to one raw border pixel for
+///                       @ref KLEIDICV_BORDER_TYPE_CONSTANT.
+kleidicv_error_t kleidicv_add_padding_by_copy(
+    const void *src, size_t src_stride, void *dst, size_t dst_stride,
+    size_t src_width, size_t src_height, size_t top_padding,
+    size_t bottom_padding, size_t left_padding, size_t right_padding,
+    size_t pixel_size, kleidicv_border_type_t border_type,
+    const void *border_value);
+
 /// Transforms the `src` image by taking the pixels specified by the coordinates
 /// from the `mapxy` image.
 ///

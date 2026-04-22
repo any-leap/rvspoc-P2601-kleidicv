@@ -133,6 +133,13 @@ int pyrdown(const uchar *src_data, size_t src_step, int src_width,
 int transpose(const uchar *src_data, size_t src_step, uchar *dst_data,
               size_t dst_step, int src_width, int src_height, int element_size);
 
+int add_padding_by_copy(const uchar *src_data, size_t src_step, int src_type,
+                        int src_width, int src_height, int src_full_width,
+                        int src_full_height, int src_roi_x, int src_roi_y,
+                        uchar *dst_data, size_t dst_step, int top, int bottom,
+                        int left, int right, int border_type,
+                        const double border_value[4]);
+
 int sum(const uchar *src_data, size_t src_step, int src_type, int width,
         int height, double *result);
 
@@ -483,6 +490,21 @@ static inline int kleidicv_transpose_with_fallback(
 }
 #undef cv_hal_transpose2d
 #define cv_hal_transpose2d kleidicv_transpose_with_fallback
+
+// copyMakeBorder
+static inline int kleidicv_add_padding_by_copy_with_fallback(
+    const uchar *src_data, size_t src_step, int src_type, int src_width,
+    int src_height, int src_full_width, int src_full_height, int src_roi_x,
+    int src_roi_y, uchar *dst_data, size_t dst_step, int top, int bottom,
+    int left, int right, int border_type, const double border_value[4]) {
+  return KLEIDICV_HAL_FALLBACK_FORWARD(
+      add_padding_by_copy, cv_hal_copyMakeBorder, src_data, src_step, src_type,
+      src_width, src_height, src_full_width, src_full_height, src_roi_x,
+      src_roi_y, dst_data, dst_step, top, bottom, left, right, border_type,
+      border_value);
+}
+#undef cv_hal_copyMakeBorder
+#define cv_hal_copyMakeBorder kleidicv_add_padding_by_copy_with_fallback
 
 #if KLEIDICV_ENABLE_ALL_OPENCV_HAL
 // sum

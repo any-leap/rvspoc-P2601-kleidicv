@@ -5,6 +5,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <array>
 #include <thread>
 
 #include "framework/array.h"
@@ -288,6 +289,55 @@ class Thread : public testing::TestWithParam<P> {
         kernel_width, kernel_height, sigma_x, sigma_y, border_type);
   }
 };
+
+static std::array<uint8_t, 16> add_padding_by_copy_border_value() {
+  return {11,  29,  47, 83, 101, 149, 173, 211,
+          227, 241, 13, 31, 59,  71,  97,  131};
+}
+
+static void check_add_padding_by_copy(size_t src_width, size_t src_height,
+                                      size_t top_padding, size_t bottom_padding,
+                                      size_t left_padding, size_t right_padding,
+                                      size_t pixel_size,
+                                      kleidicv_border_type_t border_type,
+                                      uintptr_t thread_count) {
+  const size_t src_row_width = std::max<size_t>(1, src_width * pixel_size);
+  const size_t src_rows = std::max<size_t>(1, src_height);
+  const size_t dst_row_width = std::max<size_t>(
+      1, (src_width + left_padding + right_padding) * pixel_size);
+  const size_t dst_rows =
+      std::max<size_t>(1, src_height + top_padding + bottom_padding);
+
+  test::Array2D<uint8_t> src(src_row_width, src_rows);
+  test::Array2D<uint8_t> dst_single(dst_row_width, dst_rows),
+      dst_multi(dst_row_width, dst_rows);
+
+  test::PseudoRandomNumberGenerator<uint8_t> generator;
+  src.fill(generator);
+  dst_single.fill(0xA5);
+  dst_multi.fill(0xA5);
+
+  const auto border_value = add_padding_by_copy_border_value();
+  const void *border_ptr = border_type == KLEIDICV_BORDER_TYPE_CONSTANT
+                               ? border_value.data()
+                               : nullptr;
+
+  kleidicv_error_t single_result = kleidicv_add_padding_by_copy(
+      src.data(), src.stride(), dst_single.data(), dst_single.stride(),
+      src_width, src_height, top_padding, bottom_padding, left_padding,
+      right_padding, pixel_size, border_type, border_ptr);
+
+  kleidicv_error_t multi_result = kleidicv_thread_add_padding_by_copy(
+      src.data(), src.stride(), dst_multi.data(), dst_multi.stride(), src_width,
+      src_height, top_padding, bottom_padding, left_padding, right_padding,
+      pixel_size, border_type, border_ptr,
+      get_multithreading_fake(thread_count));
+
+  EXPECT_EQ(single_result, multi_result);
+  if (single_result == KLEIDICV_OK) {
+    EXPECT_EQ_ARRAY2D(dst_multi, dst_single);
+  }
+}
 
 #define TEST_UNARY_OP(suffix, SrcT, DstT, ...)                                 \
   TEST_P(Thread, suffix) {                                                     \
@@ -908,6 +958,32 @@ TEST_P(Thread, SobelVertical3Channels) {
                                    3, 3, 3);
 }
 
+TEST_P(Thread, AddPaddingByCopyConstant) {
+  const auto [width, height, thread_count] = GetParam();
+  check_add_padding_by_copy(width + 5, height + 4, 3, 4, 5, 6, 1,
+                            KLEIDICV_BORDER_TYPE_CONSTANT, thread_count);
+}
+
+TEST_P(Thread, AddPaddingByCopyReflect) {
+  const auto [width, height, thread_count] = GetParam();
+  check_add_padding_by_copy(width + 7, height + 5, 3, 4, 5, 6, 1,
+                            KLEIDICV_BORDER_TYPE_REFLECT, thread_count);
+}
+
+TEST_P(Thread, AddPaddingByCopyReverse3Channel) {
+  const auto [width, height, thread_count] = GetParam();
+  check_add_padding_by_copy(width + 9, height + 5, 3, 4, 4, 5, 3,
+                            KLEIDICV_BORDER_TYPE_REVERSE, thread_count);
+}
+
+TEST_P(Thread, AddPaddingByCopyIndexedWrapFallback) {
+  const auto [width, height, thread_count] = GetParam();
+  const size_t src_width = width + 4;
+  check_add_padding_by_copy(src_width, height + 6, 3, 4, src_width + 2,
+                            src_width + 1, 6, KLEIDICV_BORDER_TYPE_WRAP,
+                            thread_count);
+}
+
 TEST(ThreadSobel, NotImplemented) {
   uint8_t src[1] = {};
   int16_t dst[1] = {};
@@ -919,6 +995,37 @@ TEST(ThreadSobel, NotImplemented) {
             kleidicv_thread_sobel_3x3_horizontal_s16_u8(
                 src, sizeof(src), dst, sizeof(dst), 1, 1, 1,
                 get_multithreading_fake(2)));
+}
+
+TEST(ThreadAddPaddingByCopy, ZeroSizedConstantImages) {
+  check_add_padding_by_copy(0, 3, 2, 1, 4, 3, 3, KLEIDICV_BORDER_TYPE_CONSTANT,
+                            4);
+  check_add_padding_by_copy(4, 0, 2, 3, 1, 2, 4, KLEIDICV_BORDER_TYPE_CONSTANT,
+                            4);
+}
+
+TEST(ThreadAddPaddingByCopy, NotImplemented) {
+  uint8_t src[1] = {};
+  uint8_t dst[1] = {};
+  const auto border_value = add_padding_by_copy_border_value();
+
+  EXPECT_EQ(KLEIDICV_ERROR_NOT_IMPLEMENTED,
+            kleidicv_thread_add_padding_by_copy(
+                src, sizeof(src), dst, sizeof(dst), 1, 1, 0, 0, 0, 0, 0,
+                KLEIDICV_BORDER_TYPE_CONSTANT, border_value.data(),
+                get_multithreading_fake(2)));
+
+  EXPECT_EQ(KLEIDICV_ERROR_NOT_IMPLEMENTED,
+            kleidicv_thread_add_padding_by_copy(
+                src, sizeof(src), dst, sizeof(dst), 1, 1, 0, 0, 0, 0, 1,
+                KLEIDICV_BORDER_TYPE_TRANSPARENT, border_value.data(),
+                get_multithreading_fake(2)));
+
+  EXPECT_EQ(
+      KLEIDICV_ERROR_NOT_IMPLEMENTED,
+      kleidicv_thread_add_padding_by_copy(
+          src, sizeof(src), dst, sizeof(dst), 0, 1, 0, 0, 1, 1, 1,
+          KLEIDICV_BORDER_TYPE_REPLICATE, nullptr, get_multithreading_fake(2)));
 }
 
 INSTANTIATE_TEST_SUITE_P(

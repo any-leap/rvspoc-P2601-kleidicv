@@ -7,6 +7,7 @@
 #include <cmath>
 #include <limits>
 
+#include "../../kleidicv/src/transform/add_padding_by_copy_internal.h"
 #include "kleidicv/containers/small_buffer.h"
 
 template <typename ElementType>
@@ -15,6 +16,18 @@ class SmallBufferTest : public testing::Test {};
 using ElementTypes = ::testing::Types<int16_t>;
 
 TYPED_TEST_SUITE(SmallBufferTest, ElementTypes);
+
+// add_padding_by_copy uses one prepared-border SmallBuffer specialization for
+// both constant rows and indexed border tables, but the API's dimension guards
+// prevent that path from ever reaching SmallBuffer's internal
+// multiplication-overflow branch. Cover that branch here with the exact
+// specialization used by add_padding_by_copy.
+TEST(SmallBufferAddPaddingByCopyTest, PreparedBorderAllocationOverflow) {
+  constexpr size_t kElementsToOverflow =
+      std::numeric_limits<size_t>::max() / sizeof(size_t) + 1;
+  kleidicv::AddPaddingByCopyPreparedBorderBuffer buf{kElementsToOverflow};
+  EXPECT_EQ(nullptr, buf.get());
+}
 
 TYPED_TEST(SmallBufferTest, Stack) {
   kleidicv::SmallBuffer<TypeParam, 10> buf{1};

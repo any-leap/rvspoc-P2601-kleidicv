@@ -5,6 +5,7 @@
 #include "kleidicv_hal.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cfloat>
 #include <cstddef>
@@ -24,6 +25,11 @@
 #include "opencv2/core/utility.hpp"
 #include "opencv2/imgproc.hpp"
 #include "opencv2/imgproc/hal/interface.h"
+
+namespace cv {
+CV_EXPORTS void scalarToRawData(const cv::Scalar &s, void *buf, int type,
+                                int unroll_to = 0);
+}
 
 namespace kleidicv::hal {
 
@@ -967,6 +973,176 @@ int transpose(const uchar *src_data, size_t src_step, uchar *dst_data,
                 reinterpret_cast<void *>(dst_data), dst_step,
                 static_cast<size_t>(src_width), static_cast<size_t>(src_height),
                 static_cast<size_t>(element_size), get_multithreading()));
+}
+
+int add_padding_by_copy(const uchar *src_data, size_t src_step, int src_type,
+                        int src_width, int src_height, int src_full_width,
+                        int src_full_height, int src_roi_x, int src_roi_y,
+                        uchar *dst_data, size_t dst_step, int top, int bottom,
+                        int left, int right, int border_type,
+                        const double border_value[4]) {
+  // Split OpenCV's border flags into the actual border mode and the optional
+  // "isolated" flag that forbids borrowing pixels from the parent image.
+  const int border_mode = border_type & ~CV_HAL_BORDER_ISOLATED;
+  const bool isolated = (border_type & CV_HAL_BORDER_ISOLATED) != 0;
+
+  // Translate the OpenCV border mode to the KleidiCV enum used by the backend.
+  kleidicv_border_type_t kleidicv_border_type;
+  if (from_opencv(border_mode, kleidicv_border_type)) {
+    return CV_HAL_ERROR_NOT_IMPLEMENTED;
+  }
+
+  // Keep the HAL defensive even though OpenCV's public API already rejects
+  // negative geometry before this entry point is called.
+  if (src_width < 0 || src_height < 0 || src_full_width < 0 ||
+      src_full_height < 0 || src_roi_x < 0 || src_roi_y < 0 || top < 0 ||
+      bottom < 0 || left < 0 || right < 0) {
+    return CV_HAL_ERROR_NOT_IMPLEMENTED;
+  }
+
+  // Determine the byte size of one pixel before dispatching to KleidiCV.
+  const size_t element_size = CV_ELEM_SIZE(src_type);
+
+  // Start from the exact ROI and border sizes requested by OpenCV.
+  // The four intuitive ROI/isolation combinations collapse to three
+  // behaviours:
+  // - Whole image, isolated=true:
+  //   full=ROI=10x8, border t/b/l/r=2/3/4/1 -> effective rect stays
+  //   (x=0, y=0, w=10, h=8), reduced border stays (2, 3, 4, 1).
+  // - Whole image, isolated=false:
+  //   same numbers -> dtop=dbottom=dleft=dright=0 because there are no parent
+  //   pixels outside the ROI, so this behaves exactly like the isolated
+  //   whole-image case.
+  // - Partial ROI, isolated=true:
+  //   full=10x8, ROI=(x=3, y=2, w=4, h=3), border t/b/l/r=2/2/1/4 ->
+  //   effective rect stays (x=3, y=2, w=4, h=3), reduced border stays
+  //   (2, 2, 1, 4).
+  // - Partial ROI, isolated=false:
+  //   same full image, ROI, and border -> borrow
+  //   (dtop, dbottom, dleft, dright)=(2, 2, 1, 3), so effective rect becomes
+  //   (x=2, y=0, w=8, h=7) and only a right border of 1 stays synthetic.
+  int reduced_top = top;
+  int reduced_bottom = bottom;
+  int reduced_left = left;
+  int reduced_right = right;
+  int effective_x = src_roi_x;
+  int effective_y = src_roi_y;
+  int effective_width = src_width;
+  int effective_height = src_height;
+  int effective_right = 0;
+  int effective_bottom = 0;
+
+  if (!isolated) {
+    // Compute the exclusive ROI end coordinates with overflow protection.
+    int src_right = 0;
+    int src_bottom = 0;
+    if (__builtin_add_overflow(src_roi_x, src_width, &src_right) ||
+        __builtin_add_overflow(src_roi_y, src_height, &src_bottom) ||
+        src_right > src_full_width || src_bottom > src_full_height) {
+      return CV_HAL_ERROR_NOT_IMPLEMENTED;
+    }
+
+    // Borrow as many pixels as possible from the parent image so less border
+    // work needs to be synthesized by the backend.
+    const int dtop = std::min(src_roi_y, top);
+    const int dbottom = std::min(src_full_height - src_bottom, bottom);
+    const int dleft = std::min(src_roi_x, left);
+    const int dright = std::min(src_full_width - src_right, right);
+    int width_growth = 0;
+    int height_growth = 0;
+
+    // Move the effective top-left corner outward to include borrowed pixels.
+    effective_x -= dleft;
+    effective_y -= dtop;
+
+    // Grow the effective source size by the amount borrowed on each axis.
+    if (__builtin_add_overflow(dleft, dright, &width_growth) ||
+        __builtin_add_overflow(dtop, dbottom, &height_growth) ||
+        __builtin_add_overflow(effective_width, width_growth,
+                               &effective_width) ||
+        __builtin_add_overflow(effective_height, height_growth,
+                               &effective_height)) {
+      return CV_HAL_ERROR_NOT_IMPLEMENTED;
+    }
+
+    // Shrink the remaining synthetic border sizes by the borrowed amount.
+    reduced_top -= dtop;
+    reduced_bottom -= dbottom;
+    reduced_left -= dleft;
+    reduced_right -= dright;
+  }
+
+  // Compute the exclusive end coordinates of the adjusted source rectangle.
+  if (__builtin_add_overflow(effective_x, effective_width, &effective_right) ||
+      __builtin_add_overflow(effective_y, effective_height,
+                             &effective_bottom)) {
+    return CV_HAL_ERROR_NOT_IMPLEMENTED;
+  }
+
+  // Reject any rectangle that still escapes the full parent image or leaves a
+  // negative synthetic border after ROI borrowing.
+  if (effective_width < 0 || effective_height < 0 ||
+      effective_right > src_full_width || effective_bottom > src_full_height ||
+      reduced_top < 0 || reduced_bottom < 0 || reduced_left < 0 ||
+      reduced_right < 0) {
+    return CV_HAL_ERROR_NOT_IMPLEMENTED;
+  }
+
+  // Move from the full source allocation base to the effective top-left pixel
+  // that KleidiCV should treat as the source image.
+  const uchar *effective_src = src_data +
+                               static_cast<size_t>(effective_y) * src_step +
+                               static_cast<size_t>(effective_x) * element_size;
+
+  // Keep small constant-border pixels on the stack and only fall back to heap
+  // storage when the packed pixel does not fit in the inline buffer.
+  const uchar *constant_pixel_ptr = nullptr;
+  std::array<uchar, KLEIDICV_MAXIMUM_TYPE_SIZE * KLEIDICV_MAXIMUM_CHANNEL_COUNT>
+      constant_pixel_inline{};
+  std::unique_ptr<uchar, decltype(&std::free)> constant_pixel_heap(nullptr,
+                                                                   &std::free);
+
+  if (kleidicv_border_type == KLEIDICV_BORDER_TYPE_CONSTANT) {
+    uchar *constant_pixel = constant_pixel_inline.data();
+    const int channels = CV_MAT_CN(src_type);
+    int constant_type = src_type;
+
+    // Allocate a temporary packed pixel with malloc only when the inline
+    // buffer is too small for this source element size.
+    if (element_size > constant_pixel_inline.size()) {
+      constant_pixel_heap.reset(
+          static_cast<uchar *>(std::malloc(element_size)));
+      if (!constant_pixel_heap) {
+        return CV_HAL_ERROR_UNKNOWN;
+      }
+      constant_pixel = constant_pixel_heap.get();
+    }
+
+    // OpenCV stores constant-border scalars through scalarToRawData(), so use
+    // the same helper here to match its packing and saturation rules.
+    if (channels > 4 && (border_value[0] != border_value[1] ||
+                         border_value[0] != border_value[2] ||
+                         border_value[0] != border_value[3])) {
+      return CV_HAL_ERROR_NOT_IMPLEMENTED;
+    }
+    if (channels > 4) {
+      constant_type = CV_MAKETYPE(CV_MAT_DEPTH(src_type), 1);
+    }
+
+    cv::scalarToRawData(cv::Scalar(border_value[0], border_value[1],
+                                   border_value[2], border_value[3]),
+                        constant_pixel, constant_type, channels);
+    constant_pixel_ptr = constant_pixel;
+  }
+
+  // Delegate the actual border generation to KleidiCV using the adjusted ROI.
+  return convert_error(kleidicv_thread_add_padding_by_copy(
+      effective_src, src_step, dst_data, dst_step,
+      static_cast<size_t>(effective_width),
+      static_cast<size_t>(effective_height), static_cast<size_t>(reduced_top),
+      static_cast<size_t>(reduced_bottom), static_cast<size_t>(reduced_left),
+      static_cast<size_t>(reduced_right), element_size, kleidicv_border_type,
+      constant_pixel_ptr, get_multithreading()));
 }
 
 int sum(const uchar *src_data, size_t src_step, int src_type, int width,

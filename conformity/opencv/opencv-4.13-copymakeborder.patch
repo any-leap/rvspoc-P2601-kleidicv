@@ -1,0 +1,107 @@
+// SPDX-FileCopyrightText: 2026: Arm Limited and/or its affiliates <open-source-office@arm.com>
+// SPDX-FileCopyrightText: Copyright (C) 2000-2022, Intel Corporation, all rights reserved.
+// SPDX-FileCopyrightText: Copyright (C) 2009-2011, Willow Garage Inc., all rights reserved.
+// SPDX-FileCopyrightText: Copyright (C) 2009-2016, NVIDIA Corporation, all rights reserved.
+// SPDX-FileCopyrightText: Copyright (C) 2010-2013, Advanced Micro Devices, Inc., all rights reserved.
+// SPDX-FileCopyrightText: Copyright (C) 2015-2023, OpenCV Foundation, all rights reserved.
+// SPDX-FileCopyrightText: Copyright (C) 2008-2016, Itseez Inc., all rights reserved.
+// SPDX-FileCopyrightText: Copyright (C) 2019-2023, Xperience AI, all rights reserved.
+// SPDX-FileCopyrightText: Copyright (C) 2019-2022, Shenzhen Institute of Artificial Intelligence and Robotics for Society, all rights reserved.
+// SPDX-FileCopyrightText: Copyright (C) 2022-2023, Southern University of Science And Technology, all rights reserved.
+// SPDX-FileCopyrightText: Copyright (C) 2023-2025, OpenCV AI, all rights reserved.
+// SPDX-FileCopyrightText: Third party copyrights are property of their respective owners.
+//
+// SPDX-License-Identifier: Apache-2.0
+
+diff --git a/modules/core/src/copy.cpp b/modules/core/src/copy.cpp
+index 271858ad5b..ac09140ba3 100644
+--- a/modules/core/src/copy.cpp
++++ b/modules/core/src/copy.cpp
+@@ -1187,12 +1187,31 @@ void cv::copyMakeBorder( InputArray _src, OutputArray _dst, int top, int bottom,
+ 
+     Mat src = _src.getMat();
+     int type = src.type();
++    Size wholeSize = src.size();
++    Point ofs;
++
++    if( src.isSubmatrix() )
++        src.locateROI(wholeSize, ofs);
++    else
++        ofs = Point();
++
++    _dst.create( src.rows + top + bottom, src.cols + left + right, type );
++    Mat dst = _dst.getMat();
++
++    if(top == 0 && left == 0 && bottom == 0 && right == 0)
++    {
++        if(src.data != dst.data || src.step != dst.step)
++            src.copyTo(dst);
++        return;
++    }
++
++    CALL_HAL(copyMakeBorder, cv_hal_copyMakeBorder, src.datastart, src.step,
++             src.type(), src.cols, src.rows, wholeSize.width, wholeSize.height,
++             ofs.x, ofs.y, dst.ptr(), dst.step, top, bottom, left, right,
++             borderType, value.val);
+ 
+     if( src.isSubmatrix() && (borderType & BORDER_ISOLATED) == 0 )
+     {
+-        Size wholeSize;
+-        Point ofs;
+-        src.locateROI(wholeSize, ofs);
+         int dtop = std::min(ofs.y, top);
+         int dbottom = std::min(wholeSize.height - src.rows - ofs.y, bottom);
+         int dleft = std::min(ofs.x, left);
+@@ -1204,16 +1223,6 @@ void cv::copyMakeBorder( InputArray _src, OutputArray _dst, int top, int bottom,
+         right -= dright;
+     }
+ 
+-    _dst.create( src.rows + top + bottom, src.cols + left + right, type );
+-    Mat dst = _dst.getMat();
+-
+-    if(top == 0 && left == 0 && bottom == 0 && right == 0)
+-    {
+-        if(src.data != dst.data || src.step != dst.step)
+-            src.copyTo(dst);
+-        return;
+-    }
+-
+     borderType &= ~BORDER_ISOLATED;
+ 
+     CV_IPP_RUN_FAST(ipp_copyMakeBorder(src, dst, top, bottom, left, right, borderType, value))
+diff --git a/modules/core/src/hal_replacement.hpp b/modules/core/src/hal_replacement.hpp
+index c573a97117..aabf4f7ba0 100644
+--- a/modules/core/src/hal_replacement.hpp
++++ b/modules/core/src/hal_replacement.hpp
+@@ -1149,6 +1149,31 @@ inline int hal_ni_copyToMasked(const uchar* src_data, size_t src_step, uchar* ds
+ #define cv_hal_copyToMasked hal_ni_copyToMasked
+ //! @endcond
+ 
++/**
++   @brief copyMakeBorder
++   @param src_data, src_step Whole source matrix image
++   @param src_type Type of source and destination images, for example CV_8UC1 or CV_32FC3
++   @param src_width, src_height Source ROI dimensions
++   @param src_full_width, src_full_height Whole source matrix dimensions
++   @param src_roi_x, src_roi_y Source ROI offset inside the whole matrix
++   @param dst_data, dst_step Destination image
++   @param top, bottom, left, right Border sizes requested around the ROI
++   @param border_type Border processing mode, including CV_HAL_BORDER_ISOLATED when requested
++   @param border_value Border value in OpenCV Scalar(double[4]) form
++*/
++inline int hal_ni_copyMakeBorder(const uchar* src_data, size_t src_step, int src_type,
++                                 int src_width, int src_height,
++                                 int src_full_width, int src_full_height,
++                                 int src_roi_x, int src_roi_y,
++                                 uchar* dst_data, size_t dst_step,
++                                 int top, int bottom, int left, int right,
++                                 int border_type, const double border_value[4])
++{ return CV_HAL_ERROR_NOT_IMPLEMENTED; }
++
++//! @cond IGNORED
++#define cv_hal_copyMakeBorder hal_ni_copyMakeBorder
++//! @endcond
++
+ /**
+  @ brief sum
+  @param src_data Source image data
