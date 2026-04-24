@@ -17,6 +17,7 @@ RUN apt-get update \
       git \
       gpg \
       graphviz \
+      lcov \
       less \
       libnuma1 \
       liburing2 \
@@ -67,6 +68,7 @@ RUN if [ $(dpkg --print-architecture) = amd64 ]; then \
 RUN pipx install cpplint==1.6.1
 RUN pipx install gcovr==6.0
 RUN pipx install reuse==3.0.0
+RUN pipx install lcov-cobertura==2.1.1
 
 # This tool cannot be downloaded automatically.
 # The downloaded archive shall be put next to this Dockerfile when building.

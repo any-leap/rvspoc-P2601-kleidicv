@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # If changing this image ID, please also change it in .devcontainer/Dockerfile
-image: registry.gitlab.arm.com/kleidi/kleidicv:23
+image: registry.gitlab.arm.com/kleidi/kleidicv:24
 
 variables:
   KUBERNETES_CPU_REQUEST: "16"
