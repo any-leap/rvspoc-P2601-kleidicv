@@ -649,6 +649,13 @@ TEST_P(ResizeLinearU8, LargeDimensionsGenericTiny3) {
   do_large_dimensions_test<uint8_t>(src_width, 3, dst_width, 2, channels);
 }
 
+TEST_P(ResizeLinearU8, LargeDimensionsGenericSmall3) {
+  size_t channels = GetParam();
+  size_t src_width = 72 / channels;
+  size_t dst_width = 24 / channels;
+  do_large_dimensions_test<uint8_t>(src_width, 4, dst_width, 3, channels);
+}
+
 TEST_P(ResizeLinearU8, LargeDimensionsGenericSmaller2) {
   size_t channels = GetParam();
   do_large_dimensions_test<uint8_t>(66, 19, 37, 13, channels);

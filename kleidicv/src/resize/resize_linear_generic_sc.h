@@ -234,6 +234,15 @@ class PrecalcIndicesFractions final {
       sx_fixp += sx_fixp_step3;
       dx += kStep_;
     }
+    // For best performance and simplicity, there is a common routine that loads
+    // the extra lane. This is executed in all cases, so there is no code
+    // duplication, but it does not have branching there either, so performance
+    // is better.
+    // But when the last processed vector is not full, the last index would
+    // overread the input buffer. To prevent this, set the very last index to 0.
+    if (dst_width_ * kChannels < n_iterations_ * kStep_) {
+      *(pcit.idx_ptr_ - 1) = 0;
+    }
     return true;
   }
 
@@ -372,7 +381,7 @@ class PrecalcIndicesFractions final {
 // ratio: number of vectors to load and resize to 1 vector
 // - supported combinations of (ratio, channel):
 // (2, 1), (2, 2), (2, 3), (3, 1), (3, 2), (3, 3)
-template <int kRatio, int kChannels>
+template <int kRatio, int kChannels, bool kSetRightmostLanes = false>
 class ResizeGenericU8Operation final {
  public:
   ResizeGenericU8Operation(const uint8_t *src, size_t src_stride,
@@ -549,9 +558,18 @@ class ResizeGenericU8Operation final {
 
   svuint8_t common_vector_path_r3(
       const PrecalcIterator<kRatio> &pcit, uint16_t yfrac, svuint8x3_t topsrc,
-      svuint8x3_t bottomsrc) const KLEIDICV_STREAMING {
+      svuint8x3_t bottomsrc, const uint8_t *src_top_ptr,
+      const uint8_t *src_bottom_ptr) const KLEIDICV_STREAMING {
     svuint8_t vsx0_idx = svld1(svptrue_b8(), pcit.idx_ptr_);
-    svuint8_t vsx1_idx = svadd_n_u8_x(svptrue_b8(), vsx0_idx, kChannels);
+    svuint8_t vsx1_idx{};
+    if constexpr (kSetRightmostLanes) {
+      // Make room for the last one, which is loaded separately and put together
+      // using EXT, for better performance
+      vsx1_idx = svinsr_n_u8(vsx0_idx, 0);
+      vsx1_idx = svadd_n_u8_x(svptrue_b8(), vsx1_idx, kChannels);
+    } else {
+      vsx1_idx = svadd_n_u8_x(svptrue_b8(), vsx0_idx, kChannels);
+    }
     svuint8_t a =
         svtbl2_u8(svcreate2(svget3(topsrc, 0), svget3(topsrc, 1)), vsx0_idx);
     svuint8_t b =
@@ -569,6 +587,14 @@ class ResizeGenericU8Operation final {
     b = svtbx_u8(b, svget3(topsrc, 2), vsx1_idx);
     c = svtbx_u8(c, svget3(bottomsrc, 2), vsx0_idx);
     d = svtbx_u8(d, svget3(bottomsrc, 2), vsx1_idx);
+    if constexpr (kSetRightmostLanes) {
+      svbool_t pg = svptrue_pat_b8(SV_VL1);
+      ptrdiff_t last_index = std::min(
+          src_width_ * kChannels - 1,
+          pcit.idx_ptr_[kStep_ - 1] + *pcit.src_index_ptr_ + kChannels);
+      b = svext_u8(b, svld1_u8(pg, src_top_ptr + last_index), 1UL);
+      d = svext_u8(d, svld1_u8(pg, src_bottom_ptr + last_index), 1UL);
+    }
     return interpolate(pcit, yfrac, a, b, c, d);
   }
 
@@ -579,7 +605,8 @@ class ResizeGenericU8Operation final {
     uint64_t src_index = *pcit.src_index_ptr_;
     svuint8x3_t topsrc = load8x3_u8(&src_top[src_index]);
     svuint8x3_t bottomsrc = load8x3_u8(&src_bottom[src_index]);
-    return common_vector_path_r3(pcit, yfrac, topsrc, bottomsrc);
+    return common_vector_path_r3(pcit, yfrac, topsrc, bottomsrc, src_top,
+                                 src_bottom);
   }
 
   svuint8_t remaining_path_r3(const PrecalcIterator<kRatio> &pcit,
@@ -592,7 +619,8 @@ class ResizeGenericU8Operation final {
                                           src_width_ * kChannels);
     svuint8x3_t bottomsrc = load8x3_while_u8(&src_bottom[src_index], src_index,
                                              src_width_ * kChannels);
-    return common_vector_path_r3(pcit, yfrac, topsrc, bottomsrc);
+    return common_vector_path_r3(pcit, yfrac, topsrc, bottomsrc, src_top,
+                                 src_bottom);
   }
 
   void process_row(uint64_t dy) const KLEIDICV_STREAMING {
@@ -669,6 +697,19 @@ kleidicv_error_t kleidicv_resize_generic_stripe_u8_sc(
     size_t y_begin, size_t y_end,
     uint8_t *dst,  // NOLINT
     size_t dst_stride, size_t dst_width, size_t dst_height) KLEIDICV_STREAMING {
+  if constexpr (kChannels == 3 && kRatio == 3) {
+    double inverse_scale =
+        static_cast<double>(src_width) / static_cast<double>(dst_width);
+    if (inverse_scale >= 2.8) {
+      // Rightmost lane(s) of b and d vectors need to be set separately, as
+      // the loaded src registers don't have the last pixels
+      resize_generic_u8::ResizeGenericU8Operation<kRatio, kChannels, true>
+          operation(src, src_stride, src_width, src_height, y_begin, y_end, dst,
+                    dst_stride, dst_width, dst_height);
+      return operation.process_rows();
+    }
+  }
+
   resize_generic_u8::ResizeGenericU8Operation<kRatio, kChannels> operation(
       src, src_stride, src_width, src_height, y_begin, y_end, dst, dst_stride,
       dst_width, dst_height);
