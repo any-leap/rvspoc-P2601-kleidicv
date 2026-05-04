@@ -20,8 +20,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       cmake \
       curl \
       file \
-      g++-riscv64-linux-gnu \
-      gcc-riscv64-linux-gnu \
+      g++-14-riscv64-linux-gnu \
+      gcc-14-riscv64-linux-gnu \
       git \
       gnupg \
       less \
@@ -36,7 +36,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Sanity: gcc 13.x in noble ships RVV 1.0 intrinsics.
+# Make `riscv64-linux-gnu-{gcc,g++}` resolve to the gcc-14 binaries. The
+# unversioned cross packages on noble pull in gcc-13 by default, which is too
+# old: it lacks RVV segment ld/st intrinsics (vlseg*/vsseg*) and the
+# vuintNmKxM_t tuple types — both required for natural multi-channel kernels.
+# gcc-14.2 ships the post-v1.0 intrinsic surface we want.
+RUN update-alternatives --install /usr/bin/riscv64-linux-gnu-gcc \
+        riscv64-linux-gnu-gcc /usr/bin/riscv64-linux-gnu-gcc-14 100 \
+    && update-alternatives --install /usr/bin/riscv64-linux-gnu-g++ \
+        riscv64-linux-gnu-g++ /usr/bin/riscv64-linux-gnu-g++-14 100
+
+# Sanity check.
 RUN riscv64-linux-gnu-gcc --version | head -1 \
     && qemu-riscv64 --version | head -1
 

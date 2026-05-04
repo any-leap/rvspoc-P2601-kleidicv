@@ -27,20 +27,24 @@ monotonically increasing `FIND-NNN` id.
 - 证据/复现：`docker run --rm ubuntu:24.04 ls /etc/apt/sources.list.d/` → 只有 `ubuntu.sources`。
 - #docker #ubuntu24
 
-## FIND-005 [rvv/intrinsics] gcc 13.3 不带 RVV segment ld/st intrinsics
+## FIND-005 [rvv/intrinsics] gcc 版本切换会换 vnclip 的参数个数
 
 - 日期：2026-05-04
-- 现象：写 `__riscv_vsseg3e8_v_u8m1(...)` 编译报 implicit declaration；`vuint8m1x3_t` tuple 类型也不存在；`__riscv_vcreate_v_u8m1x3` 同样。
-- 根因/机制：gcc 13.3 的 RVV intrinsics 是 v1.0 spec 的早期版本，segment ld/st (`vlseg*`/`vsseg*`) 和 tuple types (`vuintNmKxM_t`) 在 gcc 14 及之后才齐。Ubuntu 24.04 noble 默认 gcc 13。
-- 证据/复现：
-  ```
-  riscv64-linux-gnu-gcc -march=rv64gcv -c <test using vsseg3e8> -> implicit declaration
-  ls /usr/lib/gcc-cross/riscv64-linux-gnu/13/include/riscv_vector.h  -> exists, but no vsseg
-  ```
-- 影响 / 工作绕路：
-  - 多通道 interleave 输出 (gray_to_rgb, rgb_to_yuv interleave 部分)：用 N 次 strided store (`vsse*` with stride=channel_count)。功能等价，性能上比一次 vsseg 差但能跑。
-  - 多通道 deinterleave 输入 (split, rgb_to_yuv 加载 RGB 等)：strided load `vlse*`。
-  - 真要 vsseg 性能：升级到 noble-backports 或自己 build gcc 14；或者切换到 LLVM。**暂不做**——qemu 上 strided 和 segment 性能差距没意义，等真板再说。
+- 现象：
+  - gcc 13.3：`__riscv_vnclip_wx_iNm1` 是 3 参数 `(src, shift, vl)`，写 4 参数报 "too many arguments"。
+  - gcc 14.2：同名函数变成 4 参数 `(src, shift, vxrm_mode, vl)`，写 3 参数报 "too few arguments"。
+- 根因/机制：v1.0 RVV intrinsics spec 后来加了显式 `vxrm` 舍入模式参数；gcc 13 是 spec 早期版本，gcc 14 跟进了 spec 修订。同一个 intrinsic 在两版 gcc 之间签名不兼容。
+- 证据/复现：用 `__RISCV_VXRM_RNU` 常量（gcc 14 头里有）作为第 3 个参数，gcc 14 通过；这个宏在 gcc 13 头里不存在。
+- 应对：项目锁定在 gcc 14.2（noble-updates 直接装），整代码库统一用 4 参数版本。如果谁拿 gcc 13 build 会立即报错，预期。
+- #rvv #toolchain #gcc
+
+## FIND-006 [rvv/intrinsics] gcc 13 没有 segment ld/st intrinsics（已通过升级 gcc 14 解决）
+
+- 日期：2026-05-04
+- 现象（旧）：gcc 13.3 上 `__riscv_vsseg3e8_v_u8m1`、`vuint8m1x3_t` tuple 类型、`__riscv_vcreate_v_u8m1x3` 全部缺失。
+- 根因/机制：早期 RVV v1.0 intrinsics 不含 segment 形式与 tuple types；gcc 14 起齐。
+- 解决：dev image 升级到 g++-14.2-riscv64-linux-gnu（noble-updates/universe 直接有）。`vsseg3e8.v` 现在能直接 emit（objdump 验证）。
+- 历史绕路（保留以备同情况复现）：3 次 `vsse8.v` strided store at offsets 0/1/2 with stride=3。功能等价，性能 ~3x 差。
 - #rvv #toolchain #gcc
 
 ## FIND-004 [build/qemu] qemu-user 必须给 `-L sysroot` 才能跑动态链接的 riscv64 ELF

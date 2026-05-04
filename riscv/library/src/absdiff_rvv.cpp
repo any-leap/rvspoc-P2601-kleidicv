@@ -115,7 +115,7 @@ kleidicv_error_t saturating_absdiff_s8(const int8_t *src_a, size_t sa,
           vint16m2_t adiff = __riscv_vmax_vv_i16m2(diff, neg, vl);
           // Narrow with signed saturation; non-negative so only INT8_MAX side
           // matters.
-          vint8m1_t vd = __riscv_vnclip_wx_i8m1(adiff, 0, vl);
+          vint8m1_t vd = __riscv_vnclip_wx_i8m1(adiff, 0, __RISCV_VXRM_RNU, vl);
           __riscv_vse8_v_i8m1(d + x, vd, vl);
         }
       });
@@ -137,7 +137,7 @@ kleidicv_error_t saturating_absdiff_s16(const int16_t *src_a, size_t sa,
           vint32m2_t neg = __riscv_vneg_v_i32m2(diff, vl);
           vint32m2_t adiff = __riscv_vmax_vv_i32m2(diff, neg, vl);
           vint16m1_t vd =
-              __riscv_vnclip_wx_i16m1(adiff, 0, vl);
+              __riscv_vnclip_wx_i16m1(adiff, 0, __RISCV_VXRM_RNU, vl);
           __riscv_vse16_v_i16m1(d + x, vd, vl);
         }
       });
@@ -159,7 +159,7 @@ kleidicv_error_t saturating_absdiff_s32(const int32_t *src_a, size_t sa,
           vint64m2_t neg = __riscv_vneg_v_i64m2(diff, vl);
           vint64m2_t adiff = __riscv_vmax_vv_i64m2(diff, neg, vl);
           vint32m1_t vd =
-              __riscv_vnclip_wx_i32m1(adiff, 0, vl);
+              __riscv_vnclip_wx_i32m1(adiff, 0, __RISCV_VXRM_RNU, vl);
           __riscv_vse32_v_i32m1(d + x, vd, vl);
         }
       });
