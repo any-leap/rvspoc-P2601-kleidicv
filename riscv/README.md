@@ -62,11 +62,15 @@ be needed later for benchmarking; not required for unit tests.
 
 - [x] Phase 1: dev container + RVV smoke test running under qemu-riscv64
 - [x] Phase 2: parallel CMake root produces `libkleidicv.a` for riscv64 and runs
-      gtest-style API tests via ctest+qemu (1 operator end-to-end: scalar
-      `kleidicv_saturating_absdiff_{u8,s8,u16,s16,s32}` + `_sme` aliases).
-      See `riscv/library/`.
-- [ ] Phase 3: per-operator RVV intrinsics (start with element-wise conversions)
-- [ ] Phase 4: kleidicv-benchmark integration + comparison vs OpenCV RVV HAL
+      ctest under qemu (1 operator scalar-only).
+- [x] Phase 3: RVV impls + runtime dispatcher; saturating_absdiff covers u8/s8/u16/s16/s32.
+- [x] Phase 4: gray_to_rgb_u8 with vsseg3 segment store (after upgrading dev image to gcc 14.2).
+- [x] Phase 5: sum_f32 with widening reduce-sum (vfwredusum).
+- [ ] Phase 6+: bulk-port remaining 32 operators. See [PORTING_GUIDE.md](PORTING_GUIDE.md)
+      for difficulty buckets and recommended next-session order.
+- [ ] Phase final: kleidicv-benchmark integration + comparison vs OpenCV RVV HAL,
+      real-board (SG2044/A210) numbers, fold parallel riscv/library/ tree back
+      into upstream top-level CMake.
 
 ## Phase 2 reproduction
 
