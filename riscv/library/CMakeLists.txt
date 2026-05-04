@@ -62,6 +62,9 @@ add_library(kleidicv STATIC
   src/gray_to_rgb_scalar.cpp
   src/gray_to_rgb_rvv.cpp
   src/gray_to_rgb_api.cpp
+  src/sum_scalar.cpp
+  src/sum_rvv.cpp
+  src/sum_api.cpp
 )
 target_include_directories(kleidicv PUBLIC
   "${KLEIDICV_UPSTREAM_INCLUDE}"
