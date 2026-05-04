@@ -61,6 +61,18 @@ be needed later for benchmarking; not required for unit tests.
 ## Status
 
 - [x] Phase 1: dev container + RVV smoke test running under qemu-riscv64
-- [ ] Phase 2: extend KleidiCV CMake to produce a riscv64 library with scalar fallback
+- [x] Phase 2: parallel CMake root produces `libkleidicv.a` for riscv64 and runs
+      gtest-style API tests via ctest+qemu (1 operator end-to-end: scalar
+      `kleidicv_saturating_absdiff_{u8,s8,u16,s16,s32}` + `_sme` aliases).
+      See `riscv/library/`.
 - [ ] Phase 3: per-operator RVV intrinsics (start with element-wise conversions)
 - [ ] Phase 4: kleidicv-benchmark integration + comparison vs OpenCV RVV HAL
+
+## Phase 2 reproduction
+
+```bash
+./riscv/scripts/build-image.sh   # only first time
+./riscv/scripts/build-lib.sh     # configure, build, ctest under qemu
+```
+
+Override the QEMU vector length: `VLEN=512 ./riscv/scripts/build-lib.sh`.

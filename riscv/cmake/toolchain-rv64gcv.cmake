@@ -24,8 +24,10 @@ set(CMAKE_CXX_FLAGS_INIT "-march=${KLEIDICV_RVV_ARCH} -mabi=lp64d")
 # host runs `ctest` or executes a target.
 find_program(QEMU_RISCV64 qemu-riscv64)
 if(QEMU_RISCV64)
+  # qemu-user needs `-L <sysroot>` to find the dynamic linker for cross-built
+  # ELFs; without it ctest reports "Could not open ld-linux-riscv64-lp64d".
   set(CMAKE_CROSSCOMPILING_EMULATOR
-      "${QEMU_RISCV64};-cpu;rv64,v=true,vlen=256,zba=true,zbb=true,zbs=true"
+      "${QEMU_RISCV64};-L;/usr/riscv64-linux-gnu;-cpu;rv64,v=true,vlen=256,zba=true,zbb=true,zbs=true"
       CACHE STRING "qemu-user emulator for cross-built binaries")
 endif()
 

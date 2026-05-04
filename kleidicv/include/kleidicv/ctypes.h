@@ -18,7 +18,18 @@
 
 // This is defined in arm_neon.h or arm_sve.h, but we need it before including
 // those.
+#if defined(__aarch64__)
 typedef __fp16 float16_t;
+#elif defined(__FLT16_MANT_DIG__)
+// Other architectures (e.g. RISC-V) reach the public header through the same
+// include path; expose IEEE-754 binary16 as the storage type so signatures
+// parse. Real fp16 arithmetic on RISC-V requires the Zfh extension.
+typedef _Float16 float16_t;
+#else
+// Last-resort opaque storage type — algorithms touching fp16 will not build,
+// but headers still parse so unrelated operators can be used.
+typedef struct { uint16_t bits; } float16_t;
+#endif
 
 #include "kleidicv/config.h"
 
