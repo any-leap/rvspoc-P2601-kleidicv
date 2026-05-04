@@ -55,7 +55,10 @@ else()
 endif()
 
 add_library(kleidicv STATIC
+  src/dispatch.cpp
   src/absdiff_scalar.cpp
+  src/absdiff_rvv.cpp
+  src/absdiff_api.cpp
 )
 target_include_directories(kleidicv PUBLIC
   "${KLEIDICV_UPSTREAM_INCLUDE}"
