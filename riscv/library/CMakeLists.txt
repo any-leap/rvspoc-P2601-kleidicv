@@ -59,6 +59,9 @@ add_library(kleidicv STATIC
   src/absdiff_scalar.cpp
   src/absdiff_rvv.cpp
   src/absdiff_api.cpp
+  src/gray_to_rgb_scalar.cpp
+  src/gray_to_rgb_rvv.cpp
+  src/gray_to_rgb_api.cpp
 )
 target_include_directories(kleidicv PUBLIC
   "${KLEIDICV_UPSTREAM_INCLUDE}"

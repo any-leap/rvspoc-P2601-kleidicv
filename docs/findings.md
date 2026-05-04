@@ -27,6 +27,22 @@ monotonically increasing `FIND-NNN` id.
 - 证据/复现：`docker run --rm ubuntu:24.04 ls /etc/apt/sources.list.d/` → 只有 `ubuntu.sources`。
 - #docker #ubuntu24
 
+## FIND-005 [rvv/intrinsics] gcc 13.3 不带 RVV segment ld/st intrinsics
+
+- 日期：2026-05-04
+- 现象：写 `__riscv_vsseg3e8_v_u8m1(...)` 编译报 implicit declaration；`vuint8m1x3_t` tuple 类型也不存在；`__riscv_vcreate_v_u8m1x3` 同样。
+- 根因/机制：gcc 13.3 的 RVV intrinsics 是 v1.0 spec 的早期版本，segment ld/st (`vlseg*`/`vsseg*`) 和 tuple types (`vuintNmKxM_t`) 在 gcc 14 及之后才齐。Ubuntu 24.04 noble 默认 gcc 13。
+- 证据/复现：
+  ```
+  riscv64-linux-gnu-gcc -march=rv64gcv -c <test using vsseg3e8> -> implicit declaration
+  ls /usr/lib/gcc-cross/riscv64-linux-gnu/13/include/riscv_vector.h  -> exists, but no vsseg
+  ```
+- 影响 / 工作绕路：
+  - 多通道 interleave 输出 (gray_to_rgb, rgb_to_yuv interleave 部分)：用 N 次 strided store (`vsse*` with stride=channel_count)。功能等价，性能上比一次 vsseg 差但能跑。
+  - 多通道 deinterleave 输入 (split, rgb_to_yuv 加载 RGB 等)：strided load `vlse*`。
+  - 真要 vsseg 性能：升级到 noble-backports 或自己 build gcc 14；或者切换到 LLVM。**暂不做**——qemu 上 strided 和 segment 性能差距没意义，等真板再说。
+- #rvv #toolchain #gcc
+
 ## FIND-004 [build/qemu] qemu-user 必须给 `-L sysroot` 才能跑动态链接的 riscv64 ELF
 
 - 日期：2026-05-04
