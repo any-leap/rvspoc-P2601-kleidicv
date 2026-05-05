@@ -64,9 +64,11 @@ verified via objdump):
   / unusual border modes)*
 
 **Implemented partial subset**:
-- `median_blur_u8` (3×3 only via 9-element sorting network — 5×5/7×7
-  return `KLEIDICV_ERROR_NOT_IMPLEMENTED`. Generalising the sorting net
-  to 25/49 elements is non-trivial and not in P2601 scope)
+- `median_blur_u8` — 3×3 hits the 9-element sorting-network fast path;
+  any other odd kernel size goes through a quickselect (`std::nth_element`)
+  generic path. Even kernel sizes return `KLEIDICV_ERROR_RANGE` per the
+  upstream contract. Multi-channel reuses the standard
+  `vlsegN`/`vssegN` deinterleave/reinterleave wrap
 - `gaussian_blur_u8` — fast path for 3×3 zero-sigma (binomial integer
   kernel); generic f32 separable path for any other odd kernel size and
   any sigma (sigma=0 uses OpenCV's default `0.3·((ks-1)/2-1)+0.8`).

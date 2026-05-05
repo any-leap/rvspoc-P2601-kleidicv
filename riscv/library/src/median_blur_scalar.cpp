@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
+#include <vector>
 
 #include "kleidicv/kleidicv.h"
 
@@ -79,6 +80,43 @@ kleidicv_error_t median_blur_3x3_u8(const uint8_t *src, size_t src_stride,
                       r_mid[xL], r_mid[x], r_mid[xR],
                       r_bot[xL], r_bot[x], r_bot[xR]};
       rd[x] = median9(v);
+    }
+  }
+  return KLEIDICV_OK;
+}
+
+kleidicv_error_t median_blur_generic_u8(const uint8_t *src, size_t src_stride,
+                                          uint8_t *dst, size_t dst_stride,
+                                          size_t width, size_t height,
+                                          size_t kernel_size) {
+  if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
+  if (kernel_size < 3 || (kernel_size & 1u) == 0)
+    return KLEIDICV_ERROR_RANGE;
+  if (width == 0 || height == 0) return KLEIDICV_OK;
+
+  const ptrdiff_t hk = static_cast<ptrdiff_t>(kernel_size) / 2;
+  const size_t window_size = kernel_size * kernel_size;
+  const size_t mid_index = window_size / 2;
+  std::vector<uint8_t> window(window_size);
+
+  for (size_t y = 0; y < height; ++y) {
+    uint8_t *rd = dst + y * dst_stride;
+    for (size_t x = 0; x < width; ++x) {
+      // Gather K*K neighbours with replicate clip.
+      size_t k = 0;
+      for (ptrdiff_t dy = -hk; dy <= hk; ++dy) {
+        size_t sy = clip(static_cast<ptrdiff_t>(y) + dy, height);
+        const uint8_t *row = src + sy * src_stride;
+        for (ptrdiff_t dx = -hk; dx <= hk; ++dx) {
+          size_t sx = clip(static_cast<ptrdiff_t>(x) + dx, width);
+          window[k++] = row[sx];
+        }
+      }
+      // Quickselect for the median; mutates the window but that's fine —
+      // we rebuild it per output pixel.
+      std::nth_element(window.begin(), window.begin() + mid_index,
+                       window.end());
+      rd[x] = window[mid_index];
     }
   }
   return KLEIDICV_OK;

@@ -20,13 +20,25 @@ extern "C" kleidicv_error_t kleidicv_median_blur_u8(
     size_t kernel_height, kleidicv_border_type_t border_type) {
   if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
   if (channels < 1 || channels > 4) return KLEIDICV_ERROR_NOT_IMPLEMENTED;
-  if (kernel_width != 3 || kernel_height != 3)
-    return KLEIDICV_ERROR_NOT_IMPLEMENTED;
+  if (kernel_width != kernel_height) return KLEIDICV_ERROR_RANGE;
+  if (kernel_width < 3 || (kernel_width & 1u) == 0)
+    return KLEIDICV_ERROR_RANGE;
   if (border_type != KLEIDICV_BORDER_TYPE_REPLICATE)
     return KLEIDICV_ERROR_NOT_IMPLEMENTED;
+
+  // Per-plane kernel: 3×3 hits the 9-element sorting net, anything else
+  // (5×5, 7×7, …) goes through the generic quickselect path.
+  auto run_plane = [&](const uint8_t *s, size_t ss, uint8_t *d, size_t ds,
+                       size_t w, size_t h) -> kleidicv_error_t {
+    if (kernel_width == 3) {
+      return kleidicv::scalar::median_blur_3x3_u8(s, ss, d, ds, w, h);
+    }
+    return kleidicv::scalar::median_blur_generic_u8(s, ss, d, ds, w, h,
+                                                      kernel_width);
+  };
+
   if (channels == 1) {
-    return kleidicv::scalar::median_blur_3x3_u8(src, src_stride, dst,
-                                                  dst_stride, width, height);
+    return run_plane(src, src_stride, dst, dst_stride, width, height);
   }
   std::vector<uint8_t> sp_storage(width * height * channels);
   std::vector<uint8_t> dp_storage(width * height * channels);
@@ -43,8 +55,7 @@ extern "C" kleidicv_error_t kleidicv_median_blur_u8(
                                               channels);
   }
   for (size_t c = 0; c < channels; ++c) {
-    kleidicv_error_t e = kleidicv::scalar::median_blur_3x3_u8(
-        sp[c], width, dp[c], width, width, height);
+    kleidicv_error_t e = run_plane(sp[c], width, dp[c], width, width, height);
     if (e != KLEIDICV_OK) return e;
   }
   for (size_t y = 0; y < height; ++y) {

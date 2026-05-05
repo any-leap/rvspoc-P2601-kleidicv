@@ -218,11 +218,33 @@ void test_median() {
   // Center pixel (2,2): 9 neighbours = {50,10,10,10,255,10,10,10,10} sorted
   // → median is 10.
   EXPECT(dst[12] == 10, "median removes salt");
-  // 5x5 kernel returns NOT_IMPL
-  EXPECT(kleidicv_median_blur_u8(src, 5, dst, 5, 5, 5, 1, 5, 5,
-                                 KLEIDICV_BORDER_TYPE_REPLICATE) ==
-             KLEIDICV_ERROR_NOT_IMPLEMENTED,
-         "5x5 should be NOT_IMPL");
+  // 5×5 path: build a 9×9 image with a 5×5 region of zeros punctured by a
+  // single 200 in the centre. Median over a 5×5 window centred on that
+  // pixel pulls in 24 zeros + one 200 → median = 0 (the 200 is the max).
+  uint8_t src5[81] = {0};
+  src5[40] = 200;  // centre of 9×9
+  uint8_t dst5[81] = {0};
+  EXPECT(kleidicv_median_blur_u8(src5, 9, dst5, 9, 9, 9, 1, 5, 5,
+                                  KLEIDICV_BORDER_TYPE_REPLICATE) ==
+             KLEIDICV_OK,
+         "median 5×5 ok");
+  EXPECT(dst5[40] == 0, "median 5×5 zeros out the lone 200");
+
+  // 7×7 invariant on a uniform image: median must come back unchanged.
+  std::vector<uint8_t> uniform(15 * 15, 73);
+  std::vector<uint8_t> uniform_out(15 * 15, 0);
+  EXPECT(kleidicv_median_blur_u8(uniform.data(), 15, uniform_out.data(), 15,
+                                  15, 15, 1, 7, 7,
+                                  KLEIDICV_BORDER_TYPE_REPLICATE) ==
+             KLEIDICV_OK,
+         "median 7×7 ok");
+  for (auto v : uniform_out) EXPECT(v == 73, "median 7×7 uniform preserved");
+
+  // Even kernel size returns RANGE.
+  EXPECT(kleidicv_median_blur_u8(src, 5, dst, 5, 5, 5, 1, 4, 4,
+                                  KLEIDICV_BORDER_TYPE_REPLICATE) ==
+             KLEIDICV_ERROR_RANGE,
+         "median even-kernel RANGE");
 }
 
 // ---- separable_filter_2d / gaussian_blur (stubs) ----
