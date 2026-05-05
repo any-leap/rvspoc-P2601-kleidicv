@@ -25,6 +25,26 @@ if(NOT CMAKE_SYSTEM_PROCESSOR STREQUAL "riscv64")
     "<repo>/riscv/cmake/toolchain-rv64gcv.cmake.")
 endif()
 
+# The library uses RVV intrinsics throughout the *_rvv.cpp paths, so it must
+# be compiled with `-march=rv64gcv*` (the toolchain file sets this). The
+# public header (kleidicv.h) does NOT enforce this — consumers can include
+# it from plain RV64GC code; only the build of this library requires it.
+include(CheckCXXSourceCompiles)
+set(_old_flags "${CMAKE_REQUIRED_FLAGS}")
+set(CMAKE_REQUIRED_FLAGS "${CMAKE_CXX_FLAGS_INIT}")
+check_cxx_source_compiles("
+#if !defined(__riscv_v) || (__riscv_v < 1000000)
+#error need RVV 1.0 (-march=rv64gcv...)
+#endif
+int main() { return 0; }
+" KLEIDICV_RISCV_TOOLCHAIN_HAS_RVV)
+set(CMAKE_REQUIRED_FLAGS "${_old_flags}")
+if(NOT KLEIDICV_RISCV_TOOLCHAIN_HAS_RVV)
+  message(FATAL_ERROR
+    "Toolchain doesn't enable RVV 1.0 — pass -march=rv64gcv... via the "
+    "toolchain file (see riscv/cmake/toolchain-rv64gcv.cmake).")
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 

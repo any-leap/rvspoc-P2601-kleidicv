@@ -81,8 +81,6 @@ inline kleidicv_error_t check_buffer_alignment(const void *ptr,
   if constexpr (a > 1) {
     if (height > 1 && (stride_bytes % sizeof(T)) != 0)
       return KLEIDICV_ERROR_ALIGNMENT;
-    if ((reinterpret_cast<uintptr_t>(ptr) & (a - 1)) != 0)
-      return KLEIDICV_ERROR_ALIGNMENT;
   }
   (void)ptr;
   (void)stride_bytes;

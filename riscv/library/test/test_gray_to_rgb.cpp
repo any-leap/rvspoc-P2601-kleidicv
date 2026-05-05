@@ -111,10 +111,46 @@ void test_in_place() {
   }
 }
 
+// Multi-row in-place: cross-row aliasing kicks in when dst_stride > src_stride
+// (the canonical RGB layout). With src == dst, writing row 0's RGB span past
+// the end of row 0's gray bytes overwrites row 1's source — so the impl must
+// process rows bottom-to-top.
+void test_in_place_multi_row() {
+  constexpr size_t W = 23, H = 5;
+  // Buffer big enough to hold the expanded RGB output for all rows.
+  std::vector<uint8_t> buf(W * 3 * H, 0);
+  // Lay out the grayscale source compactly: row y at byte offset y*W.
+  for (size_t y = 0; y < H; ++y)
+    for (size_t x = 0; x < W; ++x)
+      buf[y * W + x] = static_cast<uint8_t>((y * 31 + x * 13 + 7) & 0xff);
+
+  // Snapshot the expected expanded output for verification.
+  std::vector<uint8_t> expected(W * 3 * H);
+  for (size_t y = 0; y < H; ++y)
+    for (size_t x = 0; x < W; ++x) {
+      uint8_t g = static_cast<uint8_t>((y * 31 + x * 13 + 7) & 0xff);
+      expected[y * W * 3 + 3 * x + 0] = g;
+      expected[y * W * 3 + 3 * x + 1] = g;
+      expected[y * W * 3 + 3 * x + 2] = g;
+    }
+
+  if (kleidicv_gray_to_rgb_u8(buf.data(), W, buf.data(), W * 3, W, H) !=
+      KLEIDICV_OK) {
+    std::fprintf(stderr,
+                 "FAIL gray_to_rgb_u8 multi-row in-place returned error\n");
+    std::exit(1);
+  }
+  if (std::memcmp(buf.data(), expected.data(), W * 3 * H) != 0) {
+    std::fprintf(stderr, "FAIL gray_to_rgb_u8 multi-row in-place corrupted\n");
+    std::exit(1);
+  }
+}
+
 }  // namespace
 
 int main() {
   test_in_place();
+  test_in_place_multi_row();
   test_backend_active();
   // Single small row — fits in one vl on every plausible vlen.
   run_case(7, 1, 0, 0);

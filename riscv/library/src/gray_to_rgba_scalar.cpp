@@ -14,9 +14,11 @@ kleidicv_error_t gray_to_rgba_u8(const uint8_t *src, size_t src_stride,
                                  size_t height) {
   if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
   if (width == 0 || height == 0) return KLEIDICV_OK;
-  // In-place expansion clobbers grays at src[x+1..x+3] when writing rd[4x..],
-  // so iterate right-to-left (see gray_to_rgb_scalar.cpp for the rationale).
-  for (size_t y = 0; y < height; ++y) {
+  // Both axes need reverse iteration for in-place to be alias-safe across
+  // rows as well as within a row. See gray_to_rgb_scalar.cpp for the full
+  // rationale; same concern, RGBA expansion just makes the cross-row
+  // overlap larger (dst_stride = 4·src_stride in the canonical layout).
+  for (size_t y = height; y-- > 0;) {
     const uint8_t *rs = src + y * src_stride;
     uint8_t *rd = dst + y * dst_stride;
     for (size_t x = width; x-- > 0;) {

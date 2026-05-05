@@ -28,12 +28,18 @@ inline kleidicv_error_t check_image_size(size_t width, size_t height) {
   return KLEIDICV_OK;
 }
 
-// stride is in bytes. For element types with alignment > 1, stride must be
-// a multiple of sizeof(T) AND the buffer pointer must be T-aligned.
-// Single-row inputs (height ≤ 1) skip the stride-alignment check, mirroring
-// upstream `CHECK_POINTER_AND_STRIDE` semantics: stride is irrelevant when
-// only one row is read, and the upstream tests pass a 1-byte stride for
-// 1-row int16/int32 buffers.
+// stride is in bytes. Mirrors upstream `CHECK_POINTER_AND_STRIDE`:
+// * for typed buffers (alignof(T) > 1), stride must be a multiple of
+//   sizeof(T) so per-row addressing stays element-aligned;
+// * single-row inputs (height ≤ 1) skip the stride check — stride is
+//   irrelevant when only one row is read, and the upstream test suite
+//   passes a 1-byte stride for 1-row int16/int32 buffers.
+//
+// Pointer alignment is intentionally NOT checked here: upstream's public
+// API contract only requires aligned stride; misaligned ROI/sliced
+// pointers (e.g. `src + 1` on a 2-byte type) flow through and the kernel
+// uses unaligned loads. Kernels that genuinely need an aligned pointer
+// guard it themselves with `MAKE_POINTER_CHECK_ALIGNMENT` upstream.
 template <typename T>
 inline kleidicv_error_t check_buffer_alignment(const void *ptr,
                                                   size_t stride_bytes,
@@ -41,8 +47,6 @@ inline kleidicv_error_t check_buffer_alignment(const void *ptr,
   constexpr size_t a = alignof(T);
   if constexpr (a > 1) {
     if (height > 1 && (stride_bytes % sizeof(T)) != 0)
-      return KLEIDICV_ERROR_ALIGNMENT;
-    if ((reinterpret_cast<uintptr_t>(ptr) & (a - 1)) != 0)
       return KLEIDICV_ERROR_ALIGNMENT;
   }
   (void)ptr;

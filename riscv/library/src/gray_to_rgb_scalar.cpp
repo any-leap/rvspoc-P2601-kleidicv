@@ -12,12 +12,15 @@ kleidicv_error_t gray_to_rgb_u8(const uint8_t *src, size_t src_stride,
   if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
   if (width == 0 || height == 0) return KLEIDICV_OK;
 
-  // The public API documents in-place support. When src and dst alias, each
-  // iteration's write at rd[3x..3x+2] would clobber the gray bytes we still
-  // need to read at src[x+1], src[x+2]. Processing right-to-left avoids that:
-  // every read at src[x] happens before any write that could overlap byte
-  // offsets ≥ x in the shared buffer.
-  for (size_t y = 0; y < height; ++y) {
+  // The public API documents in-place support. With src == dst:
+  // * within a row, writes at rd[3x..3x+2] would clobber gray bytes at
+  //   src[x+1], src[x+2] — process right-to-left.
+  // * across rows, writes to row 0's RGB span [0..3·src_stride) clobber
+  //   row 1's gray bytes if src_stride < 3·src_stride (i.e. dst_stride >
+  //   src_stride, the typical in-place case) — process rows bottom-to-top.
+  // Doing both reversals: every read at (y, x) happens before any write
+  // that could ever overlap the byte at src[(y, x)].
+  for (size_t y = height; y-- > 0;) {
     const uint8_t *row_src = src + y * src_stride;
     uint8_t *row_dst = dst + y * dst_stride;
     for (size_t x = width; x-- > 0;) {

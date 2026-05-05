@@ -33,6 +33,14 @@ monotonically increasing `DEC-NNN` id; deletions leave the id as a placeholder.
 - 选项：
   - A. 现在就搬一个完整的 RISC-V dispatcher（探测 RVV → 选 RVV，否则选 scalar）。
   - B. 暂时直接 `kleidicv_xxx = &kleidicv::scalar::xxx`，所有"backend variant"只有 scalar 一个。等 Phase 3 同时存在 scalar+RVV 时再加 dispatcher。
-- 决定：选 B。
+- 决定：选 B（**已 superseded — 见 DEC-004**）。
 - 理由：现在还没 RVV 实现可派发；过早抽象 dispatcher 只是占位代码。运行时 RVV 探测可以晚做（用 `getauxval(AT_HWCAP) & COMPAT_HWCAP_ISA_V` 或读 `/proc/cpuinfo`），不卡 Phase 2。
+- #abi #dispatch
+
+## DEC-004 [abi/dispatch] supersedes DEC-003 — runtime backend dispatcher 已落地
+
+- 日期：2026-05-04
+- 背景：DEC-003 当时把 dispatcher 推迟到"同时存在 scalar+RVV"再做。Phase 3 (`saturating_absdiff`) 一落地就触发了这个条件。
+- 决定：`riscv/library/src/dispatch.{h,cpp}` 提供 `Backend::Scalar | Rvv` 的运行时派发：load-time 用 `getauxval(AT_HWCAP) & COMPAT_HWCAP_ISA_V` 检测 V，环境变量 `KLEIDICV_FORCE_SCALAR=1` 强制走 scalar（用于 ctest 双 backend 跑同一份测试可执行文件）。每个公开 C 入口在 `*_api.cpp` 里 forward 到 `select<Fn>(scalar_fn, rvv_fn)`。
+- 影响：DEC-003 文字保留作历史；引用方应改引 DEC-004。Copilot review 把 DEC-003 当作仍然有效会得到错误结论，故此条目显式 supersede。
 - #abi #dispatch
