@@ -27,6 +27,15 @@ monotonically increasing `FIND-NNN` id.
 - 证据/复现：`docker run --rm ubuntu:24.04 ls /etc/apt/sources.list.d/` → 只有 `ubuntu.sources`。
 - #docker #ubuntu24
 
+## FIND-007 [optical_flow] LK pyramid build 内部用的是 BORDER_TYPE_REVERSE 不是 REPLICATE
+
+- 日期：2026-05-05
+- 现象：把 `kleidicv_optical_flow_pyr_lk_u8` 的 NOT_IMPLEMENTED stub 替换成真实实现后，调用立刻返回 `KLEIDICV_ERROR_NOT_IMPLEMENTED`(=1)。pyramid 自身、`standalone_lucas_kanade_alg_u8` 都各自工作，只有 image-to-image 这条路径挂。
+- 根因/机制：上游 `OpticalFlowLKPyramid::create<>()` 模板调 `kleidicv_blur_and_downsample_u8(...,KLEIDICV_BORDER_TYPE_REVERSE)`，REVERSE 是 OpenCV 的 BORDER_REFLECT_101（边界镜像、不重复边缘像素）。我们 RISC-V 的 blur impl 当时只接受 REPLICATE，遇到 REVERSE 直接 NOT_IMPLEMENTED 返回。pyramid 在调 blur 之前已经预先用 reflect_101 把 border 区域填好了（`fill_reflect_101_border_in_place`），所以 REPLICATE 内部 clip 也只是读到 pyramid 自己填的有效像素。
+- 应对：`riscv/library/src/blur_and_downsample_api.cpp` 同时接受 REPLICATE 和 REVERSE，转发到同一条路径。结果不是数学上完全严格的 REFLECT_101 blur（边界几像素的 blur 系数会偏一点），但 LK tracker 用的是远离边界的内部像素，影响可忽略。完全严格的实现需要 blur 自己支持 REFLECT_101 clip——后续 RVV 优化时一起补。
+- 证据/复现：`bash riscv/scripts/build-lib.sh` 触发 `optical_flow_*` 测试；旧版本 err=1（NOT_IMPLEMENTED）来自 `build_optical_flow_pyr_lk_pyramid_impl`。
+- #optical_flow #blur #pyramid
+
 ## FIND-005 [rvv/intrinsics] gcc 版本切换会换 vnclip 的参数个数
 
 - 日期：2026-05-04

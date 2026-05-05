@@ -65,6 +65,85 @@ add_library(kleidicv STATIC
   src/sum_scalar.cpp
   src/sum_rvv.cpp
   src/sum_api.cpp
+  src/add_scalar.cpp
+  src/add_rvv.cpp
+  src/add_api.cpp
+  src/sub_scalar.cpp
+  src/sub_rvv.cpp
+  src/sub_api.cpp
+  src/bitwise_and_scalar.cpp
+  src/bitwise_and_rvv.cpp
+  src/bitwise_and_api.cpp
+  src/threshold_binary_scalar.cpp
+  src/threshold_binary_rvv.cpp
+  src/threshold_binary_api.cpp
+  src/compare_scalar.cpp
+  src/compare_rvv.cpp
+  src/compare_api.cpp
+  src/in_range_scalar.cpp
+  src/in_range_rvv.cpp
+  src/in_range_api.cpp
+  src/add_abs_with_threshold_scalar.cpp
+  src/add_abs_with_threshold_rvv.cpp
+  src/add_abs_with_threshold_api.cpp
+  src/multiply_scalar.cpp
+  src/multiply_rvv.cpp
+  src/multiply_api.cpp
+  src/scale_scalar.cpp
+  src/scale_rvv.cpp
+  src/scale_api.cpp
+  src/exp_scalar.cpp
+  src/exp_rvv.cpp
+  src/exp_api.cpp
+  src/gray_to_rgba_scalar.cpp
+  src/gray_to_rgba_rvv.cpp
+  src/gray_to_rgba_api.cpp
+  src/split_merge_scalar.cpp
+  src/split_merge_rvv.cpp
+  src/split_merge_api.cpp
+  src/rgb_to_rgb_scalar.cpp
+  src/rgb_to_rgb_rvv.cpp
+  src/rgb_to_rgb_api.cpp
+  src/float_conv_scalar.cpp
+  src/float_conv_rvv.cpp
+  src/float_conv_api.cpp
+  src/rgb_to_yuv_scalar.cpp
+  src/rgb_to_yuv_rvv.cpp
+  src/rgb_to_yuv_api.cpp
+  src/yuv_to_rgb_scalar.cpp
+  src/yuv_to_rgb_rvv.cpp
+  src/yuv_to_rgb_api.cpp
+  src/min_max_scalar.cpp
+  src/min_max_rvv.cpp
+  src/min_max_api.cpp
+  src/sobel_scalar.cpp
+  src/sobel_rvv.cpp
+  src/sobel_api.cpp
+  src/scharr_scalar.cpp
+  src/scharr_rvv.cpp
+  src/scharr_api.cpp
+  src/blur_and_downsample_scalar.cpp
+  src/blur_and_downsample_rvv.cpp
+  src/blur_and_downsample_api.cpp
+  src/separable_filter_2d_scalar.cpp
+  src/separable_filter_2d_rvv.cpp
+  src/separable_filter_2d_api.cpp
+  src/gaussian_blur_scalar.cpp
+  src/gaussian_blur_rvv.cpp
+  src/median_blur_scalar.cpp
+  src/median_blur_api.cpp
+  src/morphology_scalar.cpp
+  src/morphology_rvv.cpp
+  src/resize_linear_scalar.cpp
+  src/resize_linear_rvv.cpp
+  src/remap_s16.cpp
+  src/transpose_rotate.cpp
+  src/warp_perspective.cpp
+  src/heavy_stubs.cpp
+  src/standalone_lucas_kanade_alg_scalar.cpp
+  src/standalone_lucas_kanade_alg_rvv.cpp
+  src/standalone_lucas_kanade_alg_api.cpp
+  src/optical_flow_pyramid.cpp
 )
 target_include_directories(kleidicv PUBLIC
   "${KLEIDICV_UPSTREAM_INCLUDE}"
@@ -75,3 +154,23 @@ target_compile_options(kleidicv PRIVATE ${KLEIDICV_RISCV_CXX_FLAGS})
 # --- tests ---
 enable_testing()
 add_subdirectory(test)
+
+# --- upstream kleidicv-benchmark (Google Benchmark) ---
+#
+# Off by default because configure-time fetches Google Benchmark v1.9.2 from
+# the network. Turn on with -DKLEIDICV_UPSTREAM_BENCHMARK=ON to produce the
+# `kleidicv-benchmark` binary that exercises every public C API across ranges
+# of image sizes, matching the upstream Arm reference benchmark suite.
+#
+# The benchmark binary intentionally calls APIs that may return
+# KLEIDICV_ERROR_NOT_IMPLEMENTED for multi-channel filter inputs; those
+# benchmarks skip / fail at runtime rather than at link time. Use Google
+# Benchmark's `--benchmark_filter=` to limit runs to the supported subset.
+option(KLEIDICV_UPSTREAM_BENCHMARK
+  "Build the upstream kleidicv-benchmark Google-Benchmark suite for riscv64"
+  OFF)
+if(KLEIDICV_UPSTREAM_BENCHMARK)
+  set(KLEIDICV_BENCHMARK ON CACHE BOOL "" FORCE)
+  add_subdirectory("${REPO_ROOT}/benchmark"
+    "${CMAKE_BINARY_DIR}/upstream_benchmark")
+endif()

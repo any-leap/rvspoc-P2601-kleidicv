@@ -1,0 +1,38 @@
+// SPDX-FileCopyrightText: 2026 RVSPOC P2601 contributors
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+// saturating_multiply takes a `double scale` per the public API, but upstream
+// arm impls all flag scale as TODO and ignore it. We mirror that here so the
+// behaviour matches across backends.
+
+#ifndef KLEIDICV_RISCV_MULTIPLY_DECLS_H
+#define KLEIDICV_RISCV_MULTIPLY_DECLS_H
+
+#include <cstddef>
+#include <cstdint>
+
+#include "kleidicv/kleidicv.h"
+
+namespace kleidicv::scalar {
+template <typename T>
+kleidicv_error_t saturating_multiply(const T *src_a, size_t src_a_stride,
+                                     const T *src_b, size_t src_b_stride,
+                                     T *dst, size_t dst_stride, size_t width,
+                                     size_t height, double scale);
+}  // namespace kleidicv::scalar
+
+namespace kleidicv::rvv {
+#define DECL(suffix, T)                                                       \
+  kleidicv_error_t saturating_multiply_##suffix(const T *, size_t, const T *, \
+                                                size_t, T *, size_t, size_t, \
+                                                size_t, double)
+DECL(u8, uint8_t);
+DECL(s8, int8_t);
+DECL(u16, uint16_t);
+DECL(s16, int16_t);
+DECL(s32, int32_t);
+#undef DECL
+}  // namespace kleidicv::rvv
+
+#endif

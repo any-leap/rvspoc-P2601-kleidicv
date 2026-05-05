@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       less \
       libc6-dev-riscv64-cross \
       ninja-build \
+      patch \
       pkg-config \
       python3 \
       python3-pip \

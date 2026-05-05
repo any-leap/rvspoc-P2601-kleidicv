@@ -7,13 +7,89 @@ SPDX-License-Identifier: Apache-2.0
 
 State as of branch `riscv/scaffolding`.
 
-## What's done (3/35 operators)
+## Status snapshot
 
-| Operator | Types | Pattern proven | Notes |
-|---|---|---|---|
-| `saturating_absdiff` | u8/s8/u16/s16/s32 | Element-wise binary; widen+abs+saturating-narrow for signed | Phase 3 |
-| `gray_to_rgb_u8` | u8 | 1-in 3-out interleave via `vsseg3e8` | Phase 4 |
-| `sum_f32` | f32 | Scalar reduction via widening `vfwredusum` (f32→f64) | Phase 5 |
+46 ctests (rvv + scalar_forced × 23 test executables) pass at VLEN=128/256/512.
+
+**Fully implemented with RVV** (saturating arithmetic / lane intrinsics
+verified via objdump):
+- `saturating_absdiff` (u8/s8/u16/s16/s32)
+- `gray_to_rgb_u8`, `gray_to_rgba_u8`
+- `sum_f32`, `min_max_*` (u8/s8/u16/s16/s32)
+- Bucket A: `add` / `sub` (u8/s8/u16/s16/u32/s32/u64/s64), `bitwise_and` (u8),
+  `multiply` (u8/s8/u16/s16/s32; scale param ignored, matches upstream TODO),
+  `threshold_binary_u8`, `compare_equal_u8`, `compare_greater_u8`,
+  `in_range` (u8 + f32), `add_abs_with_threshold_s16`, `scale` (u8 + f32),
+  `exp_f32`
+- Bucket B: `split`, `merge` (channels∈{2,3,4} × element_size∈{1,2,4,8}),
+  `rgb_to_rgb` family (8 variants), `float_conv` (f32↔u8/s8)
+- Bucket D: `sobel_3x3_horizontal/vertical_s16_u8`, `scharr_interleaved_s16_u8`,
+  `separable_filter_2d_u8/u16` (kernel_size=5), `gaussian_blur_u8` (3x3
+  binomial), `morph_u8` (`dilate`/`erode`, rectangular structuring element)
+- `blur_and_downsample_u8` (5×5 binomial + 2× downsample): horizontal pass
+  unit-stride `vle8`/`vwaddu`/`vwmaccu` into a u16 row buffer, vertical
+  pass + downsample uses `vlse16` (stride 4) and saturating `vnclipu`. The
+  2-pixel left/right border still uses scalar replicate clip
+- `transpose` and `rotate` (90/180/270) for pixel_size ∈ {1, 2, 4, 8}
+  via SEW=8/16/32/64 strided store/load (negative stride for 180° and
+  270°); pixel_size ∈ {3, 6} falls through to the scalar memcpy loop
+- Bucket F: `optical_flow_pyr_lk_*` (full 7-API stack: build/release/get_*,
+  `pyr_lk_u8`, `pyr_lk_u8_from_pyramid`) and
+  `standalone_lucas_kanade_alg_u8`. Pyramid build reuses upstream's template
+  scaffold (`kleidicv/analysis/build_optical_flow_pyr_lk_pyramid.h`,
+  `calc_optical_flow_pyr_lk.h`) on top of our `blur_and_downsample_u8` +
+  `scharr_interleaved_s16_u8`. The two LK SIMD primitives
+  (`sample_patch_and_gradients`, `accumulate_mismatch_vector`) have an RVV
+  path using `vlseg2e16` / `vwmul` / `vnclip.wi` / `vwredsum` (verified via
+  objdump) and a scalar fallback. Bit-exact against the scalar oracle on the
+  smoke test.
+
+- `resize_linear_u8/f32` (bilinear, channels=1): per-row index/weight tables
+  precomputed once, then `vluxei32` gathers four neighbours per stripe and
+  fused-multiply-add blends; u8 narrows back via two-stage `vnclipu`. Scalar
+  is bit-exact in double precision; RVV uses single precision and matches
+  scalar within ±1 LSB on cross-checked random sizes
+- `remap_s16_u8/u16` (integer pickup, REPLICATE/CONSTANT border): `vlseg2e16`
+  loads the (sx, sy) pairs, `vmslt`/`vmsge` build the OOB mask, clamped
+  indices feed `vluxei32` and `vmerge` substitutes the constant-fill pixels
+- `warp_perspective_u8` (perspective + nearest/bilinear, REPLICATE/CONSTANT):
+  per row, the three projective accumulators are built as fused multiply-add
+  vectors, then divided by sw_p once. Nearest path is single gather +
+  optional fill merge; bilinear is four gathers + per-stage `vfmacc` blend
+  with saturating narrow back to u8
+
+**Implemented scalar-only (RVV path = scalar)**:
+- *(none — every operator has either an RVV path, an upstream template fed
+  by RVV primitives, or a multi-byte memcpy fallback for pixel_size ∈ {3, 6}
+  / unusual border modes)*
+
+**Implemented partial subset**:
+- `median_blur_u8` (3×3 only via 9-element sorting network)
+- `rgb_to_yuv_u8`, `yuv_to_rgb_u8` — **YUV444 only**, other base formats
+  (NV12/NV21/YUYV/IYUV/etc) return `KLEIDICV_ERROR_NOT_IMPLEMENTED`
+
+**Constraints common to filter/transform ops**: `KLEIDICV_BORDER_TYPE_REPLICATE`
+only (or REPLICATE+CONSTANT for remap/warp). Other border types return
+`NOT_IMPLEMENTED`.
+
+Multi-channel filter ops (sobel, scharr, separable_filter_2d_u8/u16,
+gaussian_blur_u8 3×3, blur_and_downsample_u8, morph_u8 dilate/erode,
+median_blur_u8 3×3) now accept channels ∈ {1, 2, 3, 4}: channels=1 hits
+the existing fast path; channels>1 deinterleaves with `vlsegN`, runs the
+channels=1 kernel on each plane, and reinterleaves with `vssegN`. The
+deinterleave/reinterleave passes are themselves vectorised, so the
+channels>1 path stays on the vector unit even though the kernel itself
+is reused as-is. Bit-exact against per-plane scalar reference on the
+test vectors in `test_filters.cpp::test_multichannel_filters` and
+`test_filters.cpp::test_sobel`.
+
+**Stubbed `NOT_IMPLEMENTED`** (planned, not yet ported):
+- `separable_filter_2d` for kernel_size ≠ 5
+- `gaussian_blur_u8` for kernel_size ≠ 3 or non-zero sigma
+- `remap_s16point5_u8/u16` (fractional bilinear), `remap_f32_u8/u16` (float
+  coordinates)
+
+## Original kept for reference
 
 ## Per-operator file layout (4 files each)
 
@@ -110,19 +186,29 @@ These each warrant a planning session before coding.
 
 ## Suggested next session order
 
-1. **Bucket A bulk-port** (1 sitting): finish all 10 element-wise. Aim to
-   refactor partway through into a header-only template (`elementwise_rvv.h`)
-   that takes a per-op functor — will cut LOC by ~60%.
-2. **Bucket B** (1-2 sittings): channel conversions. `split`/`merge` first
-   (simple), then RGB↔YUV.
-3. **Bucket C** (small): `min_max`.
-4. **Bucket D first op**: `sobel_3x3`. Plan it explicitly: sketch the
-   stripe contract, intermediate buffer lifetime, border policy on paper
-   before any code.
-5. **Reassess.**
+All buckets above are now ported and live in `riscv/library/src/`. Open
+items left, in rough priority for a follow-up:
 
-After Bucket A+B+C, we'll be at ~21/35 operators. That's 60% — enough to
-start drafting a partial PR to upstream and showing progress to organisers.
+1. **Real-board benchmarks.** Re-run `bench_kleidicv` on SG2044/A210 (or
+   another RV64GCV host) and pin numbers in the README. Qemu-user numbers
+   are emulator instruction counts, not silicon time.
+2. **OpenCV 4.13.0 conformity.** Wire the upstream `conformity/opencv/`
+   suite (which already includes `test_standalone_lucas_kanade_alg.cpp`)
+   through this parallel build tree so it cross-checks against OpenCV's
+   reference implementation. Needs an OpenCV install in the dev image.
+3. **Multi-channel LK pyramid.** Pyramid build itself is channels-aware
+   (it forwards `channels_` to `blur_and_downsample` and `scharr`, both
+   of which now accept channels ∈ {1..4}). End-to-end LK tracking on
+   multi-channel images works mechanically but isn't covered by a smoke
+   test in this PR.
+4. **Strict REVERSE/REFLECT_101 in `blur_and_downsample`.** The LK pyramid
+   pre-fills the border with reflect_101 so our REPLICATE-clip impl works,
+   but a clean pass would teach the inner kernel to clip with
+   reflect_101 and drop the API-level alias.
+5. **Fold the `riscv/library/` parallel CMake root back into the upstream
+   top-level build.** Mirror the `kleidicv_neon` / `kleidicv_sve2` OBJECT
+   library pattern so a single `cmake -S kleidicv` build produces all
+   targets when the host toolchain supports them.
 
 ## Things to keep in mind
 
@@ -139,13 +225,15 @@ start drafting a partial PR to upstream and showing progress to organisers.
   outputs without first asserting which backend is live; otherwise a
   dispatcher init bug looks like a correctness bug.
 
-## Open questions for next session
+## Open questions
 
-- Should Bucket A be templated to share code, or keep file-per-op?
-  Recommendation: do 3 by hand first (`add`, `sub`, `bitwise_and`), then
-  decide based on observed duplication.
-- When does the parallel `riscv/library/` tree fold back into upstream
-  top-level CMake? Probably after Bucket A+B (i.e. when ~21 operators exist
-  and the "scaffold proves itself" risk is gone). See DEC-001.
-- Real-board access: organisers offered A210 remote env. We should request
-  it before starting Bucket D so benchmark runs aren't qemu-only.
+- Bucket A templated vs file-per-op: settled. We kept file-per-op but
+  factored the inner loops into `elementwise_{scalar,rvv}.h` after the
+  third op, which cut net LOC ~60% as predicted.
+- Folding `riscv/library/` back into upstream top-level CMake: still open,
+  intentionally deferred until real-board numbers land so the consolidation
+  doesn't churn under benchmark iteration.
+- Real-board access: still pending A210 environment from the organisers.
+  Build is set up so a `cmake -DCMAKE_TOOLCHAIN_FILE=…` from a real
+  RV64GCV host produces the same artifacts; only thing missing is silicon
+  time.
