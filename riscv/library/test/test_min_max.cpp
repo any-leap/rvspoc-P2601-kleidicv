@@ -70,12 +70,57 @@ void test_null() {
          "null");
 }
 
+// Cover the rest of the typed entry points. Copilot review #59 flagged that
+// s8/u16/s32 dispatch was wired but never exercised — a bad function-pointer
+// binding on those would currently land silently.
+void test_s8() {
+  constexpr size_t W = 17;
+  std::vector<int8_t> src(W);
+  for (size_t i = 0; i < W; ++i)
+    src[i] = static_cast<int8_t>((i * 19 + 5) & 0xff);
+  int8_t mn = 127, mx = -128;
+  EXPECT(kleidicv_min_max_s8(src.data(), W, W, 1, &mn, &mx) == KLEIDICV_OK,
+         "s8 err");
+  int8_t emn = 127, emx = -128;
+  for (auto v : src) { if (v < emn) emn = v; if (v > emx) emx = v; }
+  EXPECT(mn == emn && mx == emx, "s8 min/max");
+}
+void test_u16() {
+  constexpr size_t W = 13, H = 2;
+  std::vector<uint16_t> src(W * H);
+  for (size_t i = 0; i < src.size(); ++i)
+    src[i] = static_cast<uint16_t>(i * 73 + 7);
+  uint16_t mn = 0xFFFF, mx = 0;
+  EXPECT(kleidicv_min_max_u16(src.data(), W * 2, W, H, &mn, &mx) ==
+             KLEIDICV_OK,
+         "u16 err");
+  uint16_t emn = 0xFFFF, emx = 0;
+  for (auto v : src) { if (v < emn) emn = v; if (v > emx) emx = v; }
+  EXPECT(mn == emn && mx == emx, "u16 min/max");
+}
+void test_s32() {
+  constexpr size_t W = 11;
+  std::vector<int32_t> src(W);
+  for (size_t i = 0; i < W; ++i)
+    src[i] = static_cast<int32_t>(i * 1234567 - 5000000);
+  int32_t mn = INT32_MAX, mx = INT32_MIN;
+  EXPECT(kleidicv_min_max_s32(src.data(), W * 4, W, 1, &mn, &mx) ==
+             KLEIDICV_OK,
+         "s32 err");
+  int32_t emn = INT32_MAX, emx = INT32_MIN;
+  for (auto v : src) { if (v < emn) emn = v; if (v > emx) emx = v; }
+  EXPECT(mn == emn && mx == emx, "s32 min/max");
+}
+
 }  // namespace
 
 int main() {
   test_backend();
   test_u8();
+  test_s8();
   test_s16();
+  test_u16();
+  test_s32();
   test_optional_outs();
   test_null();
   if (failures == 0) { std::printf("[test_min_max] all checks passed\n"); return 0; }

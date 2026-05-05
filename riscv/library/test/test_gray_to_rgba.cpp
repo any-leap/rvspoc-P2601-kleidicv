@@ -39,6 +39,44 @@ void test_null() {
   EXPECT(kleidicv_gray_to_rgba_u8(nullptr, 1, b, 4, 1, 1) == KLEIDICV_ERROR_NULL_POINTER, "null");
 }
 
+void test_in_place_multi_row() {
+  // src == dst with the canonical 4× expanded layout. Every gray byte must
+  // come back as (g, g, g, 0xFF) at the corresponding RGBA slot, even though
+  // expanding row 0 would clobber row 1's gray bytes if the impl wasn't
+  // processing rows bottom-up.
+  constexpr size_t W = 19, H = 4;
+  std::vector<uint8_t> buf(W * 4 * H, 0);
+  for (size_t y = 0; y < H; ++y)
+    for (size_t x = 0; x < W; ++x)
+      buf[y * W + x] = static_cast<uint8_t>((y * 41 + x * 11 + 3) & 0xff);
+  std::vector<uint8_t> exp(W * 4 * H);
+  for (size_t y = 0; y < H; ++y)
+    for (size_t x = 0; x < W; ++x) {
+      uint8_t g = static_cast<uint8_t>((y * 41 + x * 11 + 3) & 0xff);
+      exp[y * W * 4 + 4 * x + 0] = g;
+      exp[y * W * 4 + 4 * x + 1] = g;
+      exp[y * W * 4 + 4 * x + 2] = g;
+      exp[y * W * 4 + 4 * x + 3] = 0xFF;
+    }
+  EXPECT(kleidicv_gray_to_rgba_u8(buf.data(), W, buf.data(), W * 4, W, H) ==
+             KLEIDICV_OK,
+         "gray_to_rgba in-place ok");
+  if (std::memcmp(buf.data(), exp.data(), W * 4 * H) != 0) {
+    std::fprintf(stderr, "FAIL gray_to_rgba multi-row in-place\n");
+    ++failures;
+  }
+}
+
 }  // namespace
 
-int main() { test_backend(); test_bulk(); test_null(); if (failures == 0) { std::printf("[test_gray_to_rgba] all checks passed\n"); return 0; } return 1; }
+int main() {
+  test_backend();
+  test_bulk();
+  test_null();
+  test_in_place_multi_row();
+  if (failures == 0) {
+    std::printf("[test_gray_to_rgba] all checks passed\n");
+    return 0;
+  }
+  return 1;
+}
