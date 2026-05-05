@@ -2,9 +2,13 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 //
-// SPOC limits: kernel_size = 5, channels = 1, BORDER_TYPE_REPLICATE only —
-// matches the only specialisation upstream's `separable_filter_2d_sc.h`
-// provides. Other configurations return KLEIDICV_ERROR_NOT_IMPLEMENTED.
+// kernel_size = 5 only (matches the only specialisation upstream's
+// `separable_filter_2d_sc.h` provides — other kernel sizes return
+// KLEIDICV_ERROR_NOT_IMPLEMENTED). channels∈{1..4} are accepted via the
+// multi-channel wrap in separable_filter_2d_api.cpp (channels=1 hits the
+// kernel below directly; channels>1 deinterleaves with vlsegN, runs the
+// channels=1 kernel per plane, and reinterleaves with vssegN). Border type
+// is BORDER_TYPE_REPLICATE only.
 
 #ifndef KLEIDICV_RISCV_SEPARABLE_FILTER_2D_DECLS_H
 #define KLEIDICV_RISCV_SEPARABLE_FILTER_2D_DECLS_H

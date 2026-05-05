@@ -7,6 +7,7 @@
 #include "blur_and_downsample_decls.h"
 #include "dispatch.h"
 #include "multichannel_helper.h"
+#include "validation_helper.h"
 
 #include "kleidicv/ctypes.h"
 #include "kleidicv/kleidicv.h"
@@ -63,6 +64,9 @@ extern "C" kleidicv_error_t kleidicv_blur_and_downsample_u8(
     kleidicv_border_type_t border_type) {
   if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
   if (channels < 1 || channels > 4) return KLEIDICV_ERROR_NOT_IMPLEMENTED;
+  if (kleidicv_error_t e = kleidicv::riscv_validation::check_image_size(
+          src_width, src_height))
+    return e;
   // RVV path is REPLICATE-clip; reflect modes go through their dedicated
   // scalar impls (not yet vectorised — the 5×5 binomial kernel only spends
   // a handful of cycles per output pixel, so the speedup vs scalar mostly

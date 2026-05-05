@@ -10,6 +10,7 @@
 
 #include "median_blur_decls.h"
 #include "multichannel_helper.h"
+#include "validation_helper.h"
 
 #include "kleidicv/ctypes.h"
 #include "kleidicv/kleidicv.h"
@@ -20,6 +21,9 @@ extern "C" kleidicv_error_t kleidicv_median_blur_u8(
     size_t kernel_height, kleidicv_border_type_t border_type) {
   if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
   if (channels < 1 || channels > 4) return KLEIDICV_ERROR_NOT_IMPLEMENTED;
+  if (kleidicv_error_t e =
+          kleidicv::riscv_validation::check_image_size(width, height))
+    return e;
   if (kernel_width != kernel_height) return KLEIDICV_ERROR_RANGE;
   if (kernel_width < 3 || (kernel_width & 1u) == 0)
     return KLEIDICV_ERROR_RANGE;

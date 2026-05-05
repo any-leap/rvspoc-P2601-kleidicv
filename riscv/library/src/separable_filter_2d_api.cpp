@@ -17,6 +17,7 @@
 #include "gaussian_blur_decls.h"
 #include "multichannel_helper.h"
 #include "separable_filter_2d_decls.h"
+#include "validation_helper.h"
 
 namespace {
 
@@ -136,6 +137,9 @@ extern "C" kleidicv_error_t kleidicv_separable_filter_2d_u8(
   if (!src || !dst || !kernel_x || !kernel_y)
     return KLEIDICV_ERROR_NULL_POINTER;
   if (channels < 1 || channels > 4) return KLEIDICV_ERROR_NOT_IMPLEMENTED;
+  if (kleidicv_error_t e =
+          kleidicv::riscv_validation::check_image_size(width, height))
+    return e;
   if (kernel_width != 5 || kernel_height != 5)
     return KLEIDICV_ERROR_NOT_IMPLEMENTED;
   if (border_type != KLEIDICV_BORDER_TYPE_REPLICATE)
@@ -168,6 +172,17 @@ extern "C" kleidicv_error_t kleidicv_separable_filter_2d_u16(
   if (!src || !dst || !kernel_x || !kernel_y)
     return KLEIDICV_ERROR_NULL_POINTER;
   if (channels < 1 || channels > 4) return KLEIDICV_ERROR_NOT_IMPLEMENTED;
+  if (kleidicv_error_t e =
+          kleidicv::riscv_validation::check_image_size(width, height))
+    return e;
+  if (kleidicv_error_t e =
+          kleidicv::riscv_validation::check_buffer_alignment<uint16_t>(
+              src, src_stride))
+    return e;
+  if (kleidicv_error_t e =
+          kleidicv::riscv_validation::check_buffer_alignment<uint16_t>(
+              dst, dst_stride))
+    return e;
   if (kernel_width != 5 || kernel_height != 5)
     return KLEIDICV_ERROR_NOT_IMPLEMENTED;
   if (border_type != KLEIDICV_BORDER_TYPE_REPLICATE)

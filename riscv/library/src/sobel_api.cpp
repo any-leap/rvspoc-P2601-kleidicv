@@ -12,6 +12,7 @@
 #include "dispatch.h"
 #include "multichannel_helper.h"
 #include "sobel_decls.h"
+#include "validation_helper.h"
 
 #include "kleidicv/kleidicv.h"
 
@@ -63,6 +64,13 @@ extern "C" kleidicv_error_t kleidicv_sobel_3x3_horizontal_s16_u8(
     size_t width, size_t height, size_t channels) {
   if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
   if (channels < 1 || channels > 4) return KLEIDICV_ERROR_NOT_IMPLEMENTED;
+  if (kleidicv_error_t e =
+          kleidicv::riscv_validation::check_image_size(width, height))
+    return e;
+  if (kleidicv_error_t e =
+          kleidicv::riscv_validation::check_buffer_alignment<int16_t>(
+              dst, dst_stride))
+    return e;
   SobelKernel kernel = active_backend() == Backend::Rvv
                             ? &kleidicv::rvv::sobel_3x3_horizontal_s16_u8
                             : &kleidicv::scalar::sobel_3x3_horizontal_s16_u8;
@@ -85,6 +93,13 @@ extern "C" kleidicv_error_t kleidicv_sobel_3x3_vertical_s16_u8(
     size_t width, size_t height, size_t channels) {
   if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
   if (channels < 1 || channels > 4) return KLEIDICV_ERROR_NOT_IMPLEMENTED;
+  if (kleidicv_error_t e =
+          kleidicv::riscv_validation::check_image_size(width, height))
+    return e;
+  if (kleidicv_error_t e =
+          kleidicv::riscv_validation::check_buffer_alignment<int16_t>(
+              dst, dst_stride))
+    return e;
   SobelKernel kernel = active_backend() == Backend::Rvv
                             ? &kleidicv::rvv::sobel_3x3_vertical_s16_u8
                             : &kleidicv::scalar::sobel_3x3_vertical_s16_u8;

@@ -15,6 +15,7 @@
 #include "dispatch.h"
 #include "multichannel_helper.h"
 #include "scharr_decls.h"
+#include "validation_helper.h"
 
 #include "kleidicv/kleidicv.h"
 
@@ -75,6 +76,14 @@ extern "C" kleidicv_error_t kleidicv_scharr_interleaved_s16_u8(
   if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
   if (src_channels < 1 || src_channels > 4)
     return KLEIDICV_ERROR_NOT_IMPLEMENTED;
+  if (src_width < 3 || src_height < 3) return KLEIDICV_ERROR_RANGE;
+  if (kleidicv_error_t e = kleidicv::riscv_validation::check_image_size(
+          src_width, src_height))
+    return e;
+  if (kleidicv_error_t e =
+          kleidicv::riscv_validation::check_buffer_alignment<int16_t>(
+              dst, dst_stride))
+    return e;
   ScharrKernel kernel = active_backend() == Backend::Rvv
                             ? &kleidicv::rvv::scharr_interleaved_s16_u8
                             : &kleidicv::scalar::scharr_interleaved_s16_u8;

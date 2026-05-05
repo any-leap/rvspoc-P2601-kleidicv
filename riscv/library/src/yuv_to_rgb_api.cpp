@@ -6,6 +6,7 @@
 
 #include "dispatch.h"
 #include "yuv_to_rgb_decls.h"
+#include "validation_helper.h"
 
 #include "kleidicv/ctypes.h"
 #include "kleidicv/kleidicv.h"
@@ -31,6 +32,10 @@ kleidicv_error_t do_yuv444(const uint8_t *src, size_t src_stride, uint8_t *dst,
 extern "C" kleidicv_error_t kleidicv_yuv_to_rgb_u8(
     const uint8_t *src, size_t src_stride, uint8_t *dst, size_t dst_stride,
     size_t width, size_t height, kleidicv_color_conversion_t fmt) {
+  if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
+  if (kleidicv_error_t e =
+          kleidicv::riscv_validation::check_image_size(width, height))
+    return e;
   unsigned base = static_cast<unsigned>(fmt) &
                   static_cast<unsigned>(KLEIDICV_COLOR_CONVERSION_YUV_FMT_MASK);
   if (base != KLEIDICV_COLOR_CONVERSION_FMT_YUV444) {

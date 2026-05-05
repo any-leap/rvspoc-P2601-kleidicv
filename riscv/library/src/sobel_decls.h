@@ -2,8 +2,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 //
-// Public API takes a `channels` parameter; SPOC supports channels==1 only.
-// Multi-channel inputs return KLEIDICV_ERROR_NOT_IMPLEMENTED.
+// channels==1 hits the optimised RVV / scalar kernel below directly;
+// channels∈{2,3,4} go through the multichannel wrap in sobel_api.cpp
+// (vlsegN deinterleave → channels=1 kernel per plane → vssegN reinterleave).
 
 #ifndef KLEIDICV_RISCV_SOBEL_DECLS_H
 #define KLEIDICV_RISCV_SOBEL_DECLS_H
