@@ -19,6 +19,12 @@ kleidicv_error_t split_dispatch(const void *src, size_t src_stride,
                                   size_t element_size) {
   if (!src || !dst_planes || !dst_strides)
     return KLEIDICV_ERROR_NULL_POINTER;
+  // Reject unsupported channels / element_size BEFORE iterating dst_planes,
+  // otherwise channels > 4 reads past the end of the caller's array.
+  if (channels < 2 || channels > 4) return KLEIDICV_ERROR_NOT_IMPLEMENTED;
+  if (element_size != 1 && element_size != 2 && element_size != 4 &&
+      element_size != 8)
+    return KLEIDICV_ERROR_NOT_IMPLEMENTED;
   if (kleidicv_error_t e = V::check_image_size(width, height)) return e;
   // Element-size-aligned access matters when the kernel uses vlsegN/vssegN at
   // SEW > 8 — stride must be a multiple of element_size and the buffer
@@ -54,6 +60,12 @@ kleidicv_error_t merge_dispatch(const void **src_planes,
                                   size_t element_size) {
   if (!src_planes || !src_strides || !dst)
     return KLEIDICV_ERROR_NULL_POINTER;
+  // Reject unsupported channels / element_size BEFORE iterating src_planes,
+  // otherwise channels > 4 reads past the end of the caller's array.
+  if (channels < 2 || channels > 4) return KLEIDICV_ERROR_NOT_IMPLEMENTED;
+  if (element_size != 1 && element_size != 2 && element_size != 4 &&
+      element_size != 8)
+    return KLEIDICV_ERROR_NOT_IMPLEMENTED;
   if (kleidicv_error_t e = V::check_image_size(width, height)) return e;
   if (element_size > 1) {
     if ((dst_stride % element_size) != 0) return KLEIDICV_ERROR_ALIGNMENT;

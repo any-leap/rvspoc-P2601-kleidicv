@@ -17,12 +17,13 @@ template <typename T, typename Rvv>
 kleidicv_error_t min_max_dispatch(const T *src, size_t src_stride, size_t width,
                                     size_t height, T *min_out, T *max_out,
                                     Rvv rvv_fn) {
+  // Upstream allows either or both of min_out / max_out to be null (no-op);
+  // src must be non-null and width/height must both be > 0 (RANGE otherwise).
   if (!src) return KLEIDICV_ERROR_NULL_POINTER;
-  // Either output pointer may be null (caller may want only min or only max);
-  // require at least one to be non-null.
-  if (!min_out && !max_out) return KLEIDICV_ERROR_NULL_POINTER;
   if (kleidicv_error_t e = V::check_image_size(width, height)) return e;
-  if (kleidicv_error_t e = V::check_buffer_alignment<T>(src, src_stride))
+  if (width == 0 || height == 0) return KLEIDICV_ERROR_RANGE;
+  if (kleidicv_error_t e =
+          V::check_buffer_alignment<T>(src, src_stride, height))
     return e;
   return active_backend() == Backend::Rvv
              ? rvv_fn(src, src_stride, width, height, min_out, max_out)

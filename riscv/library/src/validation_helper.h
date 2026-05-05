@@ -30,17 +30,24 @@ inline kleidicv_error_t check_image_size(size_t width, size_t height) {
 
 // stride is in bytes. For element types with alignment > 1, stride must be
 // a multiple of sizeof(T) AND the buffer pointer must be T-aligned.
+// Single-row inputs (height ≤ 1) skip the stride-alignment check, mirroring
+// upstream `CHECK_POINTER_AND_STRIDE` semantics: stride is irrelevant when
+// only one row is read, and the upstream tests pass a 1-byte stride for
+// 1-row int16/int32 buffers.
 template <typename T>
 inline kleidicv_error_t check_buffer_alignment(const void *ptr,
-                                                  size_t stride_bytes) {
+                                                  size_t stride_bytes,
+                                                  size_t height = 2) {
   constexpr size_t a = alignof(T);
   if constexpr (a > 1) {
-    if ((stride_bytes % sizeof(T)) != 0) return KLEIDICV_ERROR_ALIGNMENT;
+    if (height > 1 && (stride_bytes % sizeof(T)) != 0)
+      return KLEIDICV_ERROR_ALIGNMENT;
     if ((reinterpret_cast<uintptr_t>(ptr) & (a - 1)) != 0)
       return KLEIDICV_ERROR_ALIGNMENT;
   }
   (void)ptr;
   (void)stride_bytes;
+  (void)height;
   return KLEIDICV_OK;
 }
 

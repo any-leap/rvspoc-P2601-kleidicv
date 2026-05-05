@@ -17,6 +17,11 @@ kleidicv_error_t dispatch(const uint8_t *src, size_t src_stride, uint8_t *dst,
                             size_t dst_stride, size_t width, size_t height) {
   if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
   if (kleidicv_error_t e = V::check_image_size(width, height)) return e;
+  // In-place needs the scalar right-to-left path (see gray_to_rgb_api.cpp).
+  if (src == dst) {
+    return kleidicv::scalar::gray_to_rgba_u8(src, src_stride, dst, dst_stride,
+                                                width, height);
+  }
   return active_backend() == Backend::Rvv
              ? kleidicv::rvv::gray_to_rgba_u8(src, src_stride, dst, dst_stride,
                                                 width, height)

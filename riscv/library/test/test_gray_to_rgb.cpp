@@ -85,9 +85,36 @@ void test_backend_active() {
   }
 }
 
+// In-place: src and dst point at the same buffer, gray pixels are at the
+// leftmost width bytes, and after the call the same buffer holds 3·width
+// RGB bytes (each gray replicated three times). Right-to-left expansion in
+// the scalar impl is what makes this work.
+void test_in_place() {
+  constexpr size_t W = 17;
+  std::vector<uint8_t> buf(W * 3, 0);
+  for (size_t i = 0; i < W; ++i) buf[i] = static_cast<uint8_t>(i * 13 + 5);
+  std::vector<uint8_t> expected(W * 3);
+  for (size_t i = 0; i < W; ++i) {
+    uint8_t g = static_cast<uint8_t>(i * 13 + 5);
+    expected[3 * i + 0] = g;
+    expected[3 * i + 1] = g;
+    expected[3 * i + 2] = g;
+  }
+  if (kleidicv_gray_to_rgb_u8(buf.data(), W, buf.data(), W * 3, W, 1) !=
+      KLEIDICV_OK) {
+    std::fprintf(stderr, "FAIL gray_to_rgb_u8 in-place returned error\n");
+    std::exit(1);
+  }
+  if (std::memcmp(buf.data(), expected.data(), W * 3) != 0) {
+    std::fprintf(stderr, "FAIL gray_to_rgb_u8 in-place corrupted\n");
+    std::exit(1);
+  }
+}
+
 }  // namespace
 
 int main() {
+  test_in_place();
   test_backend_active();
   // Single small row — fits in one vl on every plausible vlen.
   run_case(7, 1, 0, 0);

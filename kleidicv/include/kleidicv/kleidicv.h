@@ -91,11 +91,18 @@
 #include "kleidicv/config.h"
 #include "kleidicv/ctypes.h"
 
-#if !defined(__aarch64__) && !(defined(__riscv) && (__riscv_xlen == 64))
-#error "KleidiCV is only supported for aarch64 and riscv64"
+// On RISC-V we additionally require RVV 1.0 (`__riscv_v` is the macro the
+// compiler defines when `-march=rv64gcv*` is on). The riscv backend uses RVV
+// intrinsics throughout; building for plain RV64G without `v` would link but
+// trap on every vsetvli the moment a vectorised path runs. Reject at compile
+// time so the failure mode is a clean #error rather than a runtime SIGILL.
+#if !defined(__aarch64__) && \
+    !(defined(__riscv) && (__riscv_xlen == 64) && defined(__riscv_v))
+#error "KleidiCV is only supported for aarch64 and riscv64 with RVV 1.0 (-march=rv64gcv...)"
 #endif
 
-#if defined(__aarch64__) || (defined(__riscv) && (__riscv_xlen == 64))
+#if defined(__aarch64__) || \
+    (defined(__riscv) && (__riscv_xlen == 64) && defined(__riscv_v))
 /// Maximum image size in pixels the library accepts.
 ///
 /// In case of AArch64 it is limited to (almost) 256 terapixels. This way 16 bit

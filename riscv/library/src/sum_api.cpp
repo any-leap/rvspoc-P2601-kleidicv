@@ -15,15 +15,15 @@ namespace V = kleidicv::riscv_validation;
 
 kleidicv_error_t sum_f32_dispatch(const float *src, size_t src_stride,
                                     size_t width, size_t height, float *out) {
-  if (!out) return KLEIDICV_ERROR_NULL_POINTER;
+  // Match upstream: src must be non-null first, regardless of empty rect.
+  if (!src || !out) return KLEIDICV_ERROR_NULL_POINTER;
   if (kleidicv_error_t e = V::check_image_size(width, height)) return e;
-  // Empty rect: short-circuit with OK; the impl returns sum=0.
   if (width == 0 || height == 0) {
     *out = 0.0F;
     return KLEIDICV_OK;
   }
-  if (!src) return KLEIDICV_ERROR_NULL_POINTER;
-  if (kleidicv_error_t e = V::check_buffer_alignment<float>(src, src_stride))
+  if (kleidicv_error_t e =
+          V::check_buffer_alignment<float>(src, src_stride, height))
     return e;
   return active_backend() == Backend::Rvv
              ? kleidicv::rvv::sum_f32(src, src_stride, width, height, out)

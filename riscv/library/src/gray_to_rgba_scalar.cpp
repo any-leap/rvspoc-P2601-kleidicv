@@ -14,10 +14,12 @@ kleidicv_error_t gray_to_rgba_u8(const uint8_t *src, size_t src_stride,
                                  size_t height) {
   if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
   if (width == 0 || height == 0) return KLEIDICV_OK;
+  // In-place expansion clobbers grays at src[x+1..x+3] when writing rd[4x..],
+  // so iterate right-to-left (see gray_to_rgb_scalar.cpp for the rationale).
   for (size_t y = 0; y < height; ++y) {
     const uint8_t *rs = src + y * src_stride;
     uint8_t *rd = dst + y * dst_stride;
-    for (size_t x = 0; x < width; ++x) {
+    for (size_t x = width; x-- > 0;) {
       uint8_t g = rs[x];
       rd[4 * x + 0] = g;
       rd[4 * x + 1] = g;

@@ -36,6 +36,12 @@ extern "C" kleidicv_error_t kleidicv_yuv_to_rgb_u8(
   if (kleidicv_error_t e =
           kleidicv::riscv_validation::check_image_size(width, height))
     return e;
+  constexpr unsigned kAllowed =
+      static_cast<unsigned>(KLEIDICV_COLOR_CONVERSION_YUV_FMT_MASK) |
+      static_cast<unsigned>(KLEIDICV_COLOR_CONVERSION_FLAG_BGR) |
+      static_cast<unsigned>(KLEIDICV_COLOR_CONVERSION_FLAG_ALPHA);
+  if ((static_cast<unsigned>(fmt) & ~kAllowed) != 0u)
+    return KLEIDICV_ERROR_NOT_IMPLEMENTED;
   unsigned base = static_cast<unsigned>(fmt) &
                   static_cast<unsigned>(KLEIDICV_COLOR_CONVERSION_YUV_FMT_MASK);
   if (base != KLEIDICV_COLOR_CONVERSION_FMT_YUV444) {

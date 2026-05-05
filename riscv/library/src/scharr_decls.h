@@ -1,6 +1,11 @@
 // SPDX-FileCopyrightText: 2026 RVSPOC P2601 contributors
 //
 // SPDX-License-Identifier: Apache-2.0
+//
+// channels∈{1,2,3,4} are accepted via the multichannel wrap in
+// scharr_api.cpp. channels=1 hits the kernel below directly; channels>1
+// deinterleaves with vlsegN, runs the channels=1 kernel per plane, and
+// reinterleaves the (dx,dy) pairs into the multi-channel layout.
 
 #ifndef KLEIDICV_RISCV_SCHARR_DECLS_H
 #define KLEIDICV_RISCV_SCHARR_DECLS_H
