@@ -140,11 +140,63 @@ void test_blur_downsample() {
   }
   uint8_t exp = static_cast<uint8_t>((acc + 128) >> 8);
   EXPECT(dst[0] == exp, "blur-down dst[0][0]");
-  // unsupported border returns NOT_IMPL
+  // REFLECT_101 / REVERSE: dst[0][0] uses the proper reflect_101 mapping.
+  std::vector<uint8_t> dst_r101(dW * dH);
+  EXPECT(kleidicv_blur_and_downsample_u8(src.data(), W, W, H, dst_r101.data(),
+                                          dW, 1,
+                                          KLEIDICV_BORDER_TYPE_REVERSE) ==
+             KLEIDICV_OK,
+         "reflect_101 ok");
+  auto reflect_101 = [&](ptrdiff_t v, size_t n) -> size_t {
+    if (n <= 1) return 0;
+    ptrdiff_t r = v;
+    while (r < 0 || r >= static_cast<ptrdiff_t>(n)) {
+      if (r < 0) r = -r;
+      else r = 2 * static_cast<ptrdiff_t>(n) - 2 - r;
+    }
+    return static_cast<size_t>(r);
+  };
+  int acc_r = 0;
+  for (int yy = -2; yy <= 2; ++yy)
+    for (int xx = -2; xx <= 2; ++xx) {
+      size_t sy = reflect_101(yy, H);
+      size_t sx = reflect_101(xx, W);
+      acc_r += K[yy + 2] * K[xx + 2] * src[sy * W + sx];
+    }
+  uint8_t exp_r = static_cast<uint8_t>((acc_r + 128) >> 8);
+  EXPECT(dst_r101[0] == exp_r, "blur-down REFLECT_101 dst[0][0]");
+
+  // REFLECT (with edge duplication): same exercise, different mapping.
+  std::vector<uint8_t> dst_r(dW * dH);
+  EXPECT(kleidicv_blur_and_downsample_u8(src.data(), W, W, H, dst_r.data(),
+                                          dW, 1,
+                                          KLEIDICV_BORDER_TYPE_REFLECT) ==
+             KLEIDICV_OK,
+         "reflect ok");
+  auto reflect = [&](ptrdiff_t v, size_t n) -> size_t {
+    if (n == 0) return 0;
+    ptrdiff_t r = v;
+    while (r < 0 || r >= static_cast<ptrdiff_t>(n)) {
+      if (r < 0) r = -r - 1;
+      else r = 2 * static_cast<ptrdiff_t>(n) - 1 - r;
+    }
+    return static_cast<size_t>(r);
+  };
+  int acc_rr = 0;
+  for (int yy = -2; yy <= 2; ++yy)
+    for (int xx = -2; xx <= 2; ++xx) {
+      size_t sy = reflect(yy, H);
+      size_t sx = reflect(xx, W);
+      acc_rr += K[yy + 2] * K[xx + 2] * src[sy * W + sx];
+    }
+  uint8_t exp_rr = static_cast<uint8_t>((acc_rr + 128) >> 8);
+  EXPECT(dst_r[0] == exp_rr, "blur-down REFLECT dst[0][0]");
+
+  // WRAP / CONSTANT still return NOT_IMPL (out of P2601 scope).
   EXPECT(kleidicv_blur_and_downsample_u8(src.data(), W, W, H, dst.data(), dW,
-                                         1, KLEIDICV_BORDER_TYPE_REFLECT) ==
+                                          1, KLEIDICV_BORDER_TYPE_WRAP) ==
              KLEIDICV_ERROR_NOT_IMPLEMENTED,
-         "reflect should be NOT_IMPL");
+         "wrap NOT_IMPL");
 }
 
 // ---- median ----
@@ -182,10 +234,23 @@ void test_stubs_return_not_implemented() {
                                          KLEIDICV_BORDER_TYPE_REPLICATE) ==
              KLEIDICV_ERROR_NOT_IMPLEMENTED,
          "separable u8 stub");
-  EXPECT(kleidicv_gaussian_blur_u8(b, 1, b, 1, 1, 1, 1, 3, 3, 1.0f, 1.0f,
+  // gaussian_blur_u8 now supports arbitrary odd kernel size + arbitrary
+  // sigma via the generic separable f32 path. Smoke-test 5×5 with sigma=1.0:
+  // a uniform input must come back unchanged regardless of kernel/sigma.
+  std::vector<uint8_t> uniform(8 * 8, 99);
+  std::vector<uint8_t> uniform_out(8 * 8, 0);
+  EXPECT(kleidicv_gaussian_blur_u8(uniform.data(), 8, uniform_out.data(), 8,
+                                    8, 8, 1, 5, 5, 1.0F, 1.0F,
+                                    KLEIDICV_BORDER_TYPE_REPLICATE) ==
+             KLEIDICV_OK,
+         "gaussian 5x5 sigma=1.0 ok");
+  for (size_t i = 0; i < uniform_out.size(); ++i)
+    EXPECT(uniform_out[i] == 99, "gaussian uniform preserved");
+  // Even kernel size still returns RANGE.
+  EXPECT(kleidicv_gaussian_blur_u8(b, 1, b, 1, 1, 1, 1, 4, 4, 0.0F, 0.0F,
                                    KLEIDICV_BORDER_TYPE_REPLICATE) ==
-             KLEIDICV_ERROR_NOT_IMPLEMENTED,
-         "gaussian stub");
+             KLEIDICV_ERROR_RANGE,
+         "gaussian even-kernel RANGE");
 }
 
 // Verifies that a multi-channel filter result equals running the same

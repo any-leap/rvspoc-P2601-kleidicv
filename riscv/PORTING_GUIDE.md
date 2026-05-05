@@ -65,15 +65,18 @@ verified via objdump):
 
 **Implemented partial subset**:
 - `median_blur_u8` (3×3 only via 9-element sorting network — 5×5/7×7
-  return `KLEIDICV_ERROR_NOT_IMPLEMENTED`, by SPOC scope choice)
-- `gaussian_blur_u8` (3×3 zero-sigma binomial only — arbitrary kernel
-  size / non-zero sigma return `KLEIDICV_ERROR_NOT_IMPLEMENTED`, by
-  SPOC scope choice)
-- `blur_and_downsample_u8` border modes: REPLICATE + REVERSE accepted
-  (REVERSE is what the LK pyramid passes; pyramid pre-fills border with
-  reflect_101). REFLECT / WRAP / CONSTANT return
-  `KLEIDICV_ERROR_NOT_IMPLEMENTED` — none of these are exercised by any
-  upstream caller of blur_and_downsample within the SPOC scope
+  return `KLEIDICV_ERROR_NOT_IMPLEMENTED`. Generalising the sorting net
+  to 25/49 elements is non-trivial and not in P2601 scope)
+- `gaussian_blur_u8` — fast path for 3×3 zero-sigma (binomial integer
+  kernel); generic f32 separable path for any other odd kernel size and
+  any sigma (sigma=0 uses OpenCV's default `0.3·((ks-1)/2-1)+0.8`).
+  Even kernel sizes return `KLEIDICV_ERROR_RANGE` per the upstream
+  contract
+- `blur_and_downsample_u8` border modes: REPLICATE (vectorised),
+  REFLECT_101 / REVERSE (scalar, proper reflect_101 mapping), REFLECT
+  (scalar, edge-doubled mirror). WRAP and CONSTANT return
+  `KLEIDICV_ERROR_NOT_IMPLEMENTED` (not a meaningful border mode for a
+  blur pyramid)
 - `rgb_to_yuv_u8`, `yuv_to_rgb_u8` — **YUV444 only**, other base formats
   (NV12/NV21/YUYV/IYUV/etc) return `KLEIDICV_ERROR_NOT_IMPLEMENTED`
 

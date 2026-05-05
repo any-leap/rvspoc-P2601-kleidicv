@@ -192,6 +192,43 @@ extern "C" kleidicv_error_t kleidicv_separable_filter_2d_u16_sme(
       kernel_width, kernel_y, kernel_height, border_type);
 }
 
+// Per-channel wrap for the generic gaussian path: deinterleave src into
+// planar buffers, run the channels=1 generic gaussian per plane, reinterleave.
+namespace {
+kleidicv_error_t mc_gauss_generic_u8(const uint8_t *src, size_t src_stride,
+                                       uint8_t *dst, size_t dst_stride,
+                                       size_t width, size_t height,
+                                       size_t channels, size_t kw, size_t kh,
+                                       float sx, float sy) {
+  std::vector<uint8_t> sp_storage(width * height * channels);
+  std::vector<uint8_t> dp_storage(width * height * channels);
+  uint8_t *sp[4] = {nullptr, nullptr, nullptr, nullptr};
+  uint8_t *dp[4] = {nullptr, nullptr, nullptr, nullptr};
+  for (size_t c = 0; c < channels; ++c) {
+    sp[c] = sp_storage.data() + c * width * height;
+    dp[c] = dp_storage.data() + c * width * height;
+  }
+  for (size_t y = 0; y < height; ++y) {
+    uint8_t *row[4] = {sp[0] + y * width, sp[1] + y * width,
+                       sp[2] + y * width, sp[3] + y * width};
+    kleidicv::riscv_mc::deinterleave_row_u8(src + y * src_stride, row, width,
+                                              channels);
+  }
+  for (size_t c = 0; c < channels; ++c) {
+    kleidicv_error_t e = kleidicv::scalar::gaussian_blur_generic_u8(
+        sp[c], width, dp[c], width, width, height, kw, kh, sx, sy);
+    if (e != KLEIDICV_OK) return e;
+  }
+  for (size_t y = 0; y < height; ++y) {
+    const uint8_t *row[4] = {dp[0] + y * width, dp[1] + y * width,
+                             dp[2] + y * width, dp[3] + y * width};
+    kleidicv::riscv_mc::interleave_row_u8(dst + y * dst_stride, row, width,
+                                            channels);
+  }
+  return KLEIDICV_OK;
+}
+}  // namespace
+
 extern "C" kleidicv_error_t kleidicv_gaussian_blur_u8(
     const uint8_t *src, size_t src_stride, uint8_t *dst, size_t dst_stride,
     size_t width, size_t height, size_t channels, size_t kernel_width,
@@ -201,18 +238,33 @@ extern "C" kleidicv_error_t kleidicv_gaussian_blur_u8(
   if (channels < 1 || channels > 4) return KLEIDICV_ERROR_NOT_IMPLEMENTED;
   if (border_type != KLEIDICV_BORDER_TYPE_REPLICATE)
     return KLEIDICV_ERROR_NOT_IMPLEMENTED;
-  if (kernel_width != 3 || kernel_height != 3)
-    return KLEIDICV_ERROR_NOT_IMPLEMENTED;
-  if (sigma_x != 0.0f || sigma_y != 0.0f)
-    return KLEIDICV_ERROR_NOT_IMPLEMENTED;
-  auto kernel = active_backend() == Backend::Rvv
-                    ? &kleidicv::rvv::gaussian_blur_3x3_binomial_u8
-                    : &kleidicv::scalar::gaussian_blur_3x3_binomial_u8;
-  if (channels == 1) {
-    return kernel(src, src_stride, dst, dst_stride, width, height);
+  if ((kernel_width & 1u) == 0 || (kernel_height & 1u) == 0 ||
+      kernel_width < 3 || kernel_height < 3)
+    return KLEIDICV_ERROR_RANGE;
+
+  // Fast path: 3×3 zero-sigma binomial. Drives the LK pyramid hot loop.
+  if (kernel_width == 3 && kernel_height == 3 && sigma_x == 0.0F &&
+      sigma_y == 0.0F) {
+    auto kernel = active_backend() == Backend::Rvv
+                      ? &kleidicv::rvv::gaussian_blur_3x3_binomial_u8
+                      : &kleidicv::scalar::gaussian_blur_3x3_binomial_u8;
+    if (channels == 1) {
+      return kernel(src, src_stride, dst, dst_stride, width, height);
+    }
+    return mc_gauss3_u8(kernel, src, src_stride, dst, dst_stride, width,
+                          height, channels);
   }
-  return mc_gauss3_u8(kernel, src, src_stride, dst, dst_stride, width, height,
-                       channels);
+
+  // Generic path: arbitrary odd kernel size + arbitrary sigma. Scalar f32
+  // implementation; sigma=0 uses OpenCV's default (0.3·((ks-1)/2-1)+0.8).
+  if (channels == 1) {
+    return kleidicv::scalar::gaussian_blur_generic_u8(
+        src, src_stride, dst, dst_stride, width, height, kernel_width,
+        kernel_height, sigma_x, sigma_y);
+  }
+  return mc_gauss_generic_u8(src, src_stride, dst, dst_stride, width, height,
+                              channels, kernel_width, kernel_height, sigma_x,
+                              sigma_y);
 }
 extern "C" kleidicv_error_t kleidicv_gaussian_blur_u8_sme(
     const uint8_t *src, size_t src_stride, uint8_t *dst, size_t dst_stride,

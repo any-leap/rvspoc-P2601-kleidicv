@@ -63,15 +63,26 @@ extern "C" kleidicv_error_t kleidicv_blur_and_downsample_u8(
     kleidicv_border_type_t border_type) {
   if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
   if (channels < 1 || channels > 4) return KLEIDICV_ERROR_NOT_IMPLEMENTED;
-  // The LK pyramid build passes REVERSE (reflect_101); the pyramid pre-fills
-  // border pixels with reflect_101 data, so the kernel's internal REPLICATE
-  // clipping never reaches outside the valid range. Accept both border modes.
-  if (border_type != KLEIDICV_BORDER_TYPE_REPLICATE &&
-      border_type != KLEIDICV_BORDER_TYPE_REVERSE)
-    return KLEIDICV_ERROR_NOT_IMPLEMENTED;
-  BdsKernel kernel = active_backend() == Backend::Rvv
-                          ? &kleidicv::rvv::blur_and_downsample_u8
-                          : &kleidicv::scalar::blur_and_downsample_u8;
+  // RVV path is REPLICATE-clip; reflect modes go through their dedicated
+  // scalar impls (not yet vectorised — the 5×5 binomial kernel only spends
+  // a handful of cycles per output pixel, so the speedup vs scalar mostly
+  // comes from the interior pass which is identical across border modes).
+  BdsKernel kernel = nullptr;
+  switch (border_type) {
+    case KLEIDICV_BORDER_TYPE_REPLICATE:
+      kernel = active_backend() == Backend::Rvv
+                   ? &kleidicv::rvv::blur_and_downsample_u8
+                   : &kleidicv::scalar::blur_and_downsample_u8;
+      break;
+    case KLEIDICV_BORDER_TYPE_REVERSE:
+      kernel = &kleidicv::scalar::blur_and_downsample_u8_reflect_101;
+      break;
+    case KLEIDICV_BORDER_TYPE_REFLECT:
+      kernel = &kleidicv::scalar::blur_and_downsample_u8_reflect;
+      break;
+    default:
+      return KLEIDICV_ERROR_NOT_IMPLEMENTED;
+  }
   if (channels == 1) {
     return kernel(src, src_stride, src_width, src_height, dst, dst_stride);
   }
