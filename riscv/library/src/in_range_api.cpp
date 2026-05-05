@@ -33,7 +33,8 @@ kleidicv_error_t in_range_f32_dispatch(const float *src, size_t src_stride,
                                          float hi) {
   if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
   if (kleidicv_error_t e = V::check_image_size(width, height)) return e;
-  if (kleidicv_error_t e = V::check_buffer_alignment<float>(src, src_stride))
+  if (kleidicv_error_t e =
+          V::check_buffer_alignment<float>(src, src_stride, height))
     return e;
   return active_backend() == Backend::Rvv
              ? kleidicv::rvv::in_range_f32(src, src_stride, dst, dst_stride,

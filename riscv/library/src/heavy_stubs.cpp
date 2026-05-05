@@ -159,7 +159,22 @@ kleidicv_error_t kleidicv_resize_linear_u8(const uint8_t *src, size_t src_stride
                                            uint8_t *dst, size_t dst_stride,
                                            size_t dst_width, size_t dst_height,
                                            size_t channels) {
+  if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
   if (channels != 1) return KLEIDICV_ERROR_NOT_IMPLEMENTED;
+  // Reject obviously-overflowing or too-tight strides up front (matches
+  // upstream public-API semantics — bilinear walk past the row end is
+  // KLEIDICV_ERROR_RANGE).
+  if (src_height > 1 && src_stride < src_width) return KLEIDICV_ERROR_RANGE;
+  if (dst_height > 1 && dst_stride < dst_width) return KLEIDICV_ERROR_RANGE;
+  {
+    size_t pixels = 0;
+    if (__builtin_mul_overflow(src_width, src_height, &pixels) ||
+        pixels > KLEIDICV_MAX_IMAGE_PIXELS)
+      return KLEIDICV_ERROR_RANGE;
+    if (__builtin_mul_overflow(dst_width, dst_height, &pixels) ||
+        pixels > KLEIDICV_MAX_IMAGE_PIXELS)
+      return KLEIDICV_ERROR_RANGE;
+  }
   return active_backend() == Backend::Rvv
              ? kleidicv::rvv::resize_linear_u8(src, src_stride, src_width,
                                                 src_height, dst, dst_stride,
@@ -182,7 +197,27 @@ kleidicv_error_t kleidicv_resize_linear_f32(const float *src, size_t src_stride,
                                             size_t dst_width,
                                             size_t dst_height,
                                             size_t channels) {
+  if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
   if (channels != 1) return KLEIDICV_ERROR_NOT_IMPLEMENTED;
+  // f32 strides are byte-strides per the public API; need to be a multiple
+  // of sizeof(float) so the row-walk stride math is exact.
+  if (src_height > 1 && (src_stride % sizeof(float)) != 0)
+    return KLEIDICV_ERROR_ALIGNMENT;
+  if (dst_height > 1 && (dst_stride % sizeof(float)) != 0)
+    return KLEIDICV_ERROR_ALIGNMENT;
+  if (src_height > 1 && src_stride < src_width * sizeof(float))
+    return KLEIDICV_ERROR_RANGE;
+  if (dst_height > 1 && dst_stride < dst_width * sizeof(float))
+    return KLEIDICV_ERROR_RANGE;
+  {
+    size_t pixels = 0;
+    if (__builtin_mul_overflow(src_width, src_height, &pixels) ||
+        pixels > KLEIDICV_MAX_IMAGE_PIXELS)
+      return KLEIDICV_ERROR_RANGE;
+    if (__builtin_mul_overflow(dst_width, dst_height, &pixels) ||
+        pixels > KLEIDICV_MAX_IMAGE_PIXELS)
+      return KLEIDICV_ERROR_RANGE;
+  }
   return active_backend() == Backend::Rvv
              ? kleidicv::rvv::resize_linear_f32(src, src_stride, src_width,
                                                  src_height, dst, dst_stride,

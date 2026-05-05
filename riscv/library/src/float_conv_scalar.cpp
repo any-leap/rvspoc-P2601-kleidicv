@@ -43,10 +43,22 @@ namespace kleidicv::scalar {
 kleidicv_error_t f32_to_u8(const float *src, size_t src_stride, uint8_t *dst,
                            size_t dst_stride, size_t width, size_t height) {
   HEAD_F32_TO(uint8_t) {
-    long iv = std::lrintf(rs[x]);
-    if (iv < 0) rd[x] = 0;
-    else if (iv > 255) rd[x] = 255;
-    else rd[x] = static_cast<uint8_t>(iv);
+    float v = rs[x];
+    // NaN → 0, ±Inf → saturated endpoint. lrintf on these is
+    // implementation-defined (and raises FE_INVALID), so handle them
+    // explicitly before the round-and-clamp.
+    if (std::isnan(v)) {
+      rd[x] = 0;
+    } else if (v <= 0.0F) {
+      rd[x] = 0;
+    } else if (v >= 255.0F) {
+      rd[x] = 255;
+    } else {
+      long iv = std::lrintf(v);
+      if (iv < 0) rd[x] = 0;
+      else if (iv > 255) rd[x] = 255;
+      else rd[x] = static_cast<uint8_t>(iv);
+    }
   }
   TAIL
 }
@@ -54,13 +66,22 @@ kleidicv_error_t f32_to_u8(const float *src, size_t src_stride, uint8_t *dst,
 kleidicv_error_t f32_to_s8(const float *src, size_t src_stride, int8_t *dst,
                            size_t dst_stride, size_t width, size_t height) {
   HEAD_F32_TO(int8_t) {
-    long iv = std::lrintf(rs[x]);
-    if (iv < std::numeric_limits<int8_t>::min())
+    float v = rs[x];
+    if (std::isnan(v)) {
+      rd[x] = 0;
+    } else if (v <= -128.0F) {
       rd[x] = std::numeric_limits<int8_t>::min();
-    else if (iv > std::numeric_limits<int8_t>::max())
+    } else if (v >= 127.0F) {
       rd[x] = std::numeric_limits<int8_t>::max();
-    else
-      rd[x] = static_cast<int8_t>(iv);
+    } else {
+      long iv = std::lrintf(v);
+      if (iv < std::numeric_limits<int8_t>::min())
+        rd[x] = std::numeric_limits<int8_t>::min();
+      else if (iv > std::numeric_limits<int8_t>::max())
+        rd[x] = std::numeric_limits<int8_t>::max();
+      else
+        rd[x] = static_cast<int8_t>(iv);
+    }
   }
   TAIL
 }

@@ -54,6 +54,17 @@ inline kleidicv_error_t validate_args(
   if (point_count > 0 && (!prev_points || !next_points)) {
     return KLEIDICV_ERROR_NULL_POINTER;
   }
+  // KLEIDICV_MAX_IMAGE_PIXELS guard — reject before width*height*channels can
+  // overflow size_t in the row-elements / scharr-row-bytes calculations
+  // below (matches upstream test/api/test_standalone_lucas_kanade_alg.cpp's
+  // INT_MAX coverage).
+  {
+    size_t pixels = 0;
+    if (__builtin_mul_overflow(static_cast<size_t>(width),
+                                 static_cast<size_t>(height), &pixels))
+      return KLEIDICV_ERROR_RANGE;
+    if (pixels > KLEIDICV_MAX_IMAGE_PIXELS) return KLEIDICV_ERROR_RANGE;
+  }
   if ((scharr_stride_bytes % sizeof(int16_t)) != 0) {
     return KLEIDICV_ERROR_ALIGNMENT;
   }

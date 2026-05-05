@@ -88,6 +88,35 @@ void test_s8_to_f32() {
     EXPECT(out[i] == static_cast<float>(src[i]), "s8->f32");
 }
 
+// NaN must convert to 0; ±Inf must saturate to the destination range
+// endpoints. Both backends now match this contract.
+void test_f32_to_int_special_values() {
+  const float qnan = std::nanf("");
+  const float pinf = std::numeric_limits<float>::infinity();
+  const float ninf = -pinf;
+  const float src[5] = {qnan, pinf, ninf, -300.0F, 300.0F};
+
+  uint8_t outu[5];
+  EXPECT(kleidicv_f32_to_u8(src, sizeof(src), outu, sizeof(outu), 5, 1) ==
+             KLEIDICV_OK,
+         "f32->u8 special-values err");
+  EXPECT(outu[0] == 0, "NaN -> 0 (u8)");
+  EXPECT(outu[1] == 255, "+Inf -> 255 (u8)");
+  EXPECT(outu[2] == 0, "-Inf -> 0 (u8)");
+  EXPECT(outu[3] == 0, "-300 -> 0 (u8)");
+  EXPECT(outu[4] == 255, "+300 -> 255 (u8)");
+
+  int8_t outs[5];
+  EXPECT(kleidicv_f32_to_s8(src, sizeof(src), outs, sizeof(outs), 5, 1) ==
+             KLEIDICV_OK,
+         "f32->s8 special-values err");
+  EXPECT(outs[0] == 0, "NaN -> 0 (s8)");
+  EXPECT(outs[1] == 127, "+Inf -> 127 (s8)");
+  EXPECT(outs[2] == -128, "-Inf -> -128 (s8)");
+  EXPECT(outs[3] == -128, "-300 -> -128 (s8)");
+  EXPECT(outs[4] == 127, "+300 -> 127 (s8)");
+}
+
 }  // namespace
 
 int main() {
@@ -96,6 +125,7 @@ int main() {
   test_f32_to_s8();
   test_u8_to_f32();
   test_s8_to_f32();
+  test_f32_to_int_special_values();
   if (failures == 0) { std::printf("[test_float_conv] all checks passed\n"); return 0; }
   return 1;
 }

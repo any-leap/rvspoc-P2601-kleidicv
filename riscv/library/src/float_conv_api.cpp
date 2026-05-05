@@ -19,9 +19,11 @@ kleidicv_error_t fconv_dispatch(const Src *src, size_t src_stride, Dst *dst,
                                   size_t height) {
   if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
   if (kleidicv_error_t e = V::check_image_size(width, height)) return e;
-  if (kleidicv_error_t e = V::check_buffer_alignment<Src>(src, src_stride))
+  if (kleidicv_error_t e =
+          V::check_buffer_alignment<Src>(src, src_stride, height))
     return e;
-  if (kleidicv_error_t e = V::check_buffer_alignment<Dst>(dst, dst_stride))
+  if (kleidicv_error_t e =
+          V::check_buffer_alignment<Dst>(dst, dst_stride, height))
     return e;
   return active_backend() == Backend::Rvv
              ? Rvv(src, src_stride, dst, dst_stride, width, height)

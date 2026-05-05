@@ -60,8 +60,12 @@ namespace {
 kleidicv_error_t f32_to_u8(const float *src, size_t src_stride, uint8_t *dst,
                            size_t dst_stride, size_t width, size_t height) {
   ROW_DRIVER_F32_TO(uint8_t, {
-    // Clip in fp to avoid signed/unsigned conversion ambiguity; vfcvt then
-    // produces values that fit in u32 cleanly.
+    // NaN must convert to 0 per the public API. vfmax/vfmin propagate NaN
+    // (NaN survives min/max), so detect NaN with vmfne(self, self) and
+    // replace with 0 BEFORE the fp clamp + vfcvt. After the NaN→0 step,
+    // ±Inf clamps to [0, 255] cleanly via the same min/max.
+    vbool32_t nan_mask = __riscv_vmfne_vv_f32m1_b32(v, v, vl);
+    v = __riscv_vfmerge_vfm_f32m1(v, 0.0F, nan_mask, vl);
     v = __riscv_vfmax_vf_f32m1(v, 0.0f, vl);
     v = __riscv_vfmin_vf_f32m1(v, 255.0f, vl);
     vuint32m1_t i32 = __riscv_vfcvt_xu_f_v_u32m1(v, vl);
@@ -74,6 +78,9 @@ kleidicv_error_t f32_to_u8(const float *src, size_t src_stride, uint8_t *dst,
 kleidicv_error_t f32_to_s8(const float *src, size_t src_stride, int8_t *dst,
                            size_t dst_stride, size_t width, size_t height) {
   ROW_DRIVER_F32_TO(int8_t, {
+    // Same NaN→0 handling as f32_to_u8 above.
+    vbool32_t nan_mask = __riscv_vmfne_vv_f32m1_b32(v, v, vl);
+    v = __riscv_vfmerge_vfm_f32m1(v, 0.0F, nan_mask, vl);
     v = __riscv_vfmax_vf_f32m1(v, -128.0f, vl);
     v = __riscv_vfmin_vf_f32m1(v, 127.0f, vl);
     vint32m1_t i32 = __riscv_vfcvt_x_f_v_i32m1(v, vl);
