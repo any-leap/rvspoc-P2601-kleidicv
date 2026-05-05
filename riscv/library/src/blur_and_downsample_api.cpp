@@ -61,6 +61,7 @@ extern "C" kleidicv_error_t kleidicv_blur_and_downsample_u8(
     const uint8_t *src, size_t src_stride, size_t src_width, size_t src_height,
     uint8_t *dst, size_t dst_stride, size_t channels,
     kleidicv_border_type_t border_type) {
+  if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
   if (channels < 1 || channels > 4) return KLEIDICV_ERROR_NOT_IMPLEMENTED;
   // The LK pyramid build passes REVERSE (reflect_101); the pyramid pre-fills
   // border pixels with reflect_101 data, so the kernel's internal REPLICATE

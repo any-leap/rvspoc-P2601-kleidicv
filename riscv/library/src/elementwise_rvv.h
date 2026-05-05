@@ -69,6 +69,32 @@ struct rvv_traits<float> {
 
 #undef KLEIDICV_RVV_TRAITS
 
+// Same alignment / image-size guards as the scalar helper. We mirror the
+// upstream contract so a misaligned stride or overflowing image returns
+// KLEIDICV_ERROR_ALIGNMENT / KLEIDICV_ERROR_RANGE rather than corrupting
+// memory with vector loads.
+template <typename T>
+inline kleidicv_error_t check_buffer_alignment(const void *ptr,
+                                                  size_t stride_bytes) {
+  constexpr size_t a = alignof(T);
+  if constexpr (a > 1) {
+    if ((stride_bytes % sizeof(T)) != 0) return KLEIDICV_ERROR_ALIGNMENT;
+    if ((reinterpret_cast<uintptr_t>(ptr) & (a - 1)) != 0)
+      return KLEIDICV_ERROR_ALIGNMENT;
+  }
+  (void)ptr;
+  (void)stride_bytes;
+  return KLEIDICV_OK;
+}
+
+inline kleidicv_error_t check_image_size(size_t width, size_t height) {
+  size_t pixels = 0;
+  if (__builtin_mul_overflow(width, height, &pixels))
+    return KLEIDICV_ERROR_RANGE;
+  if (pixels > KLEIDICV_MAX_IMAGE_PIXELS) return KLEIDICV_ERROR_RANGE;
+  return KLEIDICV_OK;
+}
+
 // `Op(vec_t, vec_t, size_t vl) -> vec_t` is invoked per strip.
 template <typename T, typename Op>
 inline kleidicv_error_t binary_elementwise(const T *src_a, size_t src_a_stride,
@@ -77,6 +103,13 @@ inline kleidicv_error_t binary_elementwise(const T *src_a, size_t src_a_stride,
                                            size_t width, size_t height,
                                            Op op) {
   if (!src_a || !src_b || !dst) return KLEIDICV_ERROR_NULL_POINTER;
+  if (kleidicv_error_t e = check_image_size(width, height)) return e;
+  if (kleidicv_error_t e = check_buffer_alignment<T>(src_a, src_a_stride))
+    return e;
+  if (kleidicv_error_t e = check_buffer_alignment<T>(src_b, src_b_stride))
+    return e;
+  if (kleidicv_error_t e = check_buffer_alignment<T>(dst, dst_stride))
+    return e;
   if (width == 0 || height == 0) return KLEIDICV_OK;
 
   using R = rvv_traits<T>;
@@ -105,6 +138,9 @@ inline kleidicv_error_t unary_elementwise(const T *src, size_t src_stride,
                                           T *dst, size_t dst_stride,
                                           size_t width, size_t height, Op op) {
   if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
+  if (kleidicv_error_t e = check_image_size(width, height)) return e;
+  if (kleidicv_error_t e = check_buffer_alignment<T>(src, src_stride)) return e;
+  if (kleidicv_error_t e = check_buffer_alignment<T>(dst, dst_stride)) return e;
   if (width == 0 || height == 0) return KLEIDICV_OK;
 
   using R = rvv_traits<T>;

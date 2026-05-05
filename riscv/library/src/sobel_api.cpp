@@ -61,6 +61,7 @@ kleidicv_error_t mc_sobel_wrap(SobelKernel kernel, const uint8_t *src,
 extern "C" kleidicv_error_t kleidicv_sobel_3x3_horizontal_s16_u8(
     const uint8_t *src, size_t src_stride, int16_t *dst, size_t dst_stride,
     size_t width, size_t height, size_t channels) {
+  if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
   if (channels < 1 || channels > 4) return KLEIDICV_ERROR_NOT_IMPLEMENTED;
   SobelKernel kernel = active_backend() == Backend::Rvv
                             ? &kleidicv::rvv::sobel_3x3_horizontal_s16_u8
@@ -82,6 +83,7 @@ extern "C" kleidicv_error_t kleidicv_sobel_3x3_horizontal_s16_u8_sme(
 extern "C" kleidicv_error_t kleidicv_sobel_3x3_vertical_s16_u8(
     const uint8_t *src, size_t src_stride, int16_t *dst, size_t dst_stride,
     size_t width, size_t height, size_t channels) {
+  if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
   if (channels < 1 || channels > 4) return KLEIDICV_ERROR_NOT_IMPLEMENTED;
   SobelKernel kernel = active_backend() == Backend::Rvv
                             ? &kleidicv::rvv::sobel_3x3_vertical_s16_u8

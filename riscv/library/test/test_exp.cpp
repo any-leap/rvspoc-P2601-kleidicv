@@ -54,6 +54,32 @@ void test_bulk() {
   }
 }
 
+void test_large_inputs() {
+  // Inputs spanning the specialcase range so we exercise the |n|>126 and
+  // |n|>192 branches the upstream impl handles for over/underflow.
+  // expected: exp(-100) ≈ underflow→0, exp(0)=1, exp(50)≈5.18e21 (finite),
+  // exp(100)≈overflow→+inf.
+  float src[5] = {-200.0f, -100.0f, 0.0f, 50.0f, 200.0f};
+  float out[5] = {0};
+  (void)kleidicv_exp_f32(src, sizeof(src), out, sizeof(out), 5, 1);
+  for (int i = 0; i < 5; ++i) {
+    float ref = std::exp(src[i]);
+    float got = out[i];
+    bool ok;
+    if (std::isinf(ref) && ref > 0) {
+      ok = std::isinf(got) && got > 0;
+    } else if (ref == 0.0f) {
+      ok = (got == 0.0f) || std::fabs(got) < 1e-30f;
+    } else {
+      ok = std::fabs(got - ref) / std::fmax(std::fabs(ref), 1e-30f) < 1e-4f;
+    }
+    if (!ok) {
+      std::fprintf(stderr, "FAIL exp(%g) got=%g ref=%g\n", src[i], got, ref);
+      ++failures;
+    }
+  }
+}
+
 void test_zero() {
   float src[1] = {0.0f}, out[1] = {0.0f};
   (void)kleidicv_exp_f32(src, 4, out, 4, 1, 1);
@@ -74,6 +100,7 @@ int main() {
   test_bulk();
   test_zero();
   test_null();
+  test_large_inputs();
   if (failures == 0) {
     std::printf("[test_exp] all checks passed\n");
     return 0;

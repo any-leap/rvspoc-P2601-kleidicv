@@ -64,7 +64,16 @@ verified via objdump):
   / unusual border modes)*
 
 **Implemented partial subset**:
-- `median_blur_u8` (3×3 only via 9-element sorting network)
+- `median_blur_u8` (3×3 only via 9-element sorting network — 5×5/7×7
+  return `KLEIDICV_ERROR_NOT_IMPLEMENTED`, by SPOC scope choice)
+- `gaussian_blur_u8` (3×3 zero-sigma binomial only — arbitrary kernel
+  size / non-zero sigma return `KLEIDICV_ERROR_NOT_IMPLEMENTED`, by
+  SPOC scope choice)
+- `blur_and_downsample_u8` border modes: REPLICATE + REVERSE accepted
+  (REVERSE is what the LK pyramid passes; pyramid pre-fills border with
+  reflect_101). REFLECT / WRAP / CONSTANT return
+  `KLEIDICV_ERROR_NOT_IMPLEMENTED` — none of these are exercised by any
+  upstream caller of blur_and_downsample within the SPOC scope
 - `rgb_to_yuv_u8`, `yuv_to_rgb_u8` — **YUV444 only**, other base formats
   (NV12/NV21/YUYV/IYUV/etc) return `KLEIDICV_ERROR_NOT_IMPLEMENTED`
 

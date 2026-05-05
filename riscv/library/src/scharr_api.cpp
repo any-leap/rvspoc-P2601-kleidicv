@@ -72,6 +72,7 @@ kleidicv_error_t mc_scharr_wrap(ScharrKernel kernel, const uint8_t *src,
 extern "C" kleidicv_error_t kleidicv_scharr_interleaved_s16_u8(
     const uint8_t *src, size_t src_stride, size_t src_width, size_t src_height,
     size_t src_channels, int16_t *dst, size_t dst_stride) {
+  if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
   if (src_channels < 1 || src_channels > 4)
     return KLEIDICV_ERROR_NOT_IMPLEMENTED;
   ScharrKernel kernel = active_backend() == Backend::Rvv

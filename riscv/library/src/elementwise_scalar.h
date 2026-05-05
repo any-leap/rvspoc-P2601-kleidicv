@@ -4,8 +4,8 @@
 //
 // Shared row-walker for scalar elementwise binary ops on image-like 2D
 // buffers. The per-op .cpp supplies a per-element functor; this header owns
-// the null-pointer guard, empty-rect short-circuit, stride math, and the two
-// nested loops.
+// the null-pointer/alignment/range guards, empty-rect short-circuit, stride
+// math, and the two nested loops.
 
 #ifndef KLEIDICV_RISCV_ELEMENTWISE_SCALAR_H
 #define KLEIDICV_RISCV_ELEMENTWISE_SCALAR_H
@@ -17,6 +17,35 @@
 
 namespace kleidicv::scalar {
 
+// Validates an image buffer's stride and alignment vs the upstream contract:
+// * stride is in bytes and must be a multiple of sizeof(T) so per-element
+//   addressing stays aligned across rows;
+// * the buffer pointer itself must be aligned for T (single rows access T
+//   through reinterpret_cast at row+x*sizeof(T)).
+// Returns KLEIDICV_OK on pass, KLEIDICV_ERROR_ALIGNMENT otherwise.
+template <typename T>
+inline kleidicv_error_t check_buffer_alignment(const void *ptr,
+                                                  size_t stride_bytes) {
+  constexpr size_t a = alignof(T);
+  if constexpr (a > 1) {
+    if ((stride_bytes % sizeof(T)) != 0) return KLEIDICV_ERROR_ALIGNMENT;
+    if ((reinterpret_cast<uintptr_t>(ptr) & (a - 1)) != 0)
+      return KLEIDICV_ERROR_ALIGNMENT;
+  }
+  (void)ptr;
+  (void)stride_bytes;
+  return KLEIDICV_OK;
+}
+
+// width*height overflow + max-pixel cap, mirroring upstream CHECK_IMAGE_SIZE.
+inline kleidicv_error_t check_image_size(size_t width, size_t height) {
+  size_t pixels = 0;
+  if (__builtin_mul_overflow(width, height, &pixels))
+    return KLEIDICV_ERROR_RANGE;
+  if (pixels > KLEIDICV_MAX_IMAGE_PIXELS) return KLEIDICV_ERROR_RANGE;
+  return KLEIDICV_OK;
+}
+
 // `Op(T, T) -> T` is invoked per element.
 template <typename T, typename Op>
 inline kleidicv_error_t binary_elementwise(const T *src_a, size_t src_a_stride,
@@ -25,6 +54,13 @@ inline kleidicv_error_t binary_elementwise(const T *src_a, size_t src_a_stride,
                                            size_t width, size_t height,
                                            Op op) {
   if (!src_a || !src_b || !dst) return KLEIDICV_ERROR_NULL_POINTER;
+  if (kleidicv_error_t e = check_image_size(width, height)) return e;
+  if (kleidicv_error_t e = check_buffer_alignment<T>(src_a, src_a_stride))
+    return e;
+  if (kleidicv_error_t e = check_buffer_alignment<T>(src_b, src_b_stride))
+    return e;
+  if (kleidicv_error_t e = check_buffer_alignment<T>(dst, dst_stride))
+    return e;
   if (width == 0 || height == 0) return KLEIDICV_OK;
 
   for (size_t y = 0; y < height; ++y) {
@@ -47,6 +83,9 @@ inline kleidicv_error_t unary_elementwise(const T *src, size_t src_stride,
                                           T *dst, size_t dst_stride,
                                           size_t width, size_t height, Op op) {
   if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
+  if (kleidicv_error_t e = check_image_size(width, height)) return e;
+  if (kleidicv_error_t e = check_buffer_alignment<T>(src, src_stride)) return e;
+  if (kleidicv_error_t e = check_buffer_alignment<T>(dst, dst_stride)) return e;
   if (width == 0 || height == 0) return KLEIDICV_OK;
 
   for (size_t y = 0; y < height; ++y) {

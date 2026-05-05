@@ -133,6 +133,8 @@ extern "C" kleidicv_error_t kleidicv_separable_filter_2d_u8(
     size_t width, size_t height, size_t channels, const uint8_t *kernel_x,
     size_t kernel_width, const uint8_t *kernel_y, size_t kernel_height,
     kleidicv_border_type_t border_type) {
+  if (!src || !dst || !kernel_x || !kernel_y)
+    return KLEIDICV_ERROR_NULL_POINTER;
   if (channels < 1 || channels > 4) return KLEIDICV_ERROR_NOT_IMPLEMENTED;
   if (kernel_width != 5 || kernel_height != 5)
     return KLEIDICV_ERROR_NOT_IMPLEMENTED;
@@ -163,6 +165,8 @@ extern "C" kleidicv_error_t kleidicv_separable_filter_2d_u16(
     size_t width, size_t height, size_t channels, const uint16_t *kernel_x,
     size_t kernel_width, const uint16_t *kernel_y, size_t kernel_height,
     kleidicv_border_type_t border_type) {
+  if (!src || !dst || !kernel_x || !kernel_y)
+    return KLEIDICV_ERROR_NULL_POINTER;
   if (channels < 1 || channels > 4) return KLEIDICV_ERROR_NOT_IMPLEMENTED;
   if (kernel_width != 5 || kernel_height != 5)
     return KLEIDICV_ERROR_NOT_IMPLEMENTED;
@@ -193,6 +197,7 @@ extern "C" kleidicv_error_t kleidicv_gaussian_blur_u8(
     size_t width, size_t height, size_t channels, size_t kernel_width,
     size_t kernel_height, float sigma_x, float sigma_y,
     kleidicv_border_type_t border_type) {
+  if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
   if (channels < 1 || channels > 4) return KLEIDICV_ERROR_NOT_IMPLEMENTED;
   if (border_type != KLEIDICV_BORDER_TYPE_REPLICATE)
     return KLEIDICV_ERROR_NOT_IMPLEMENTED;

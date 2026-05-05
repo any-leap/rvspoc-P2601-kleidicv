@@ -91,11 +91,11 @@
 #include "kleidicv/config.h"
 #include "kleidicv/ctypes.h"
 
-#if !defined(__aarch64__) && !defined(__riscv)
+#if !defined(__aarch64__) && !(defined(__riscv) && (__riscv_xlen == 64))
 #error "KleidiCV is only supported for aarch64 and riscv64"
 #endif
 
-#if defined(__aarch64__) || defined(__riscv)
+#if defined(__aarch64__) || (defined(__riscv) && (__riscv_xlen == 64))
 /// Maximum image size in pixels the library accepts.
 ///
 /// In case of AArch64 it is limited to (almost) 256 terapixels. This way 16 bit

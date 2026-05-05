@@ -9,8 +9,10 @@
 // 2. r = x - n*ln2 (split as Hi/Lo for accuracy).
 // 3. poly(r) = Horner over kPoly coefficients.
 // 4. 2^n via bit manipulation of z's mantissa.
-// "Short path" only — out-of-range inputs return whatever this produces, no
-// special-cased over/underflow handling. Public docs don't promise it.
+// Adopts upstream's "short path + specialcase" structure: when every lane
+// has |n| ≤ 126 the cheap bit-manipulated 2^n works; otherwise fall through
+// to a specialcase that splits 2^n = s1·s2 so f32 overflow during the
+// scale step matches expf semantics for large |x|.
 
 #include <riscv_vector.h>
 
@@ -64,7 +66,37 @@ kleidicv_error_t exp_f32(const float *src, size_t src_stride, float *dst,
             __riscv_vadd_vx_u32m1(e, 0x3f800000U, vl);
         vfloat32m1_t scale_f =
             __riscv_vreinterpret_v_u32m1_f32m1(scale_u);
-        return __riscv_vfmul_vv_f32m1(scale_f, p, vl);
+        vfloat32m1_t fast = __riscv_vfmul_vv_f32m1(scale_f, p, vl);
+
+        // Specialcase: |n| > 126 lanes need 2^n split as s1·s2 so the
+        // f32 multiplication does not silently overflow / underflow.
+        // We compute the specialcase unconditionally and merge it into
+        // `fast` only on the masked lanes — cheaper than predicating the
+        // whole tail in RVV.
+        vfloat32m1_t abs_n = __riscv_vfabs_v_f32m1(n, vl);
+        vbool32_t need_special =
+            __riscv_vmfgt_vf_f32m1_b32(abs_n, 126.0F, vl);
+
+        // b = (n <= 0) ? 0x83000000 : 0
+        vbool32_t n_nonpos = __riscv_vmfle_vf_f32m1_b32(n, 0.0F, vl);
+        vuint32m1_t zero_u = __riscv_vmv_v_x_u32m1(0u, vl);
+        vuint32m1_t b = __riscv_vmerge_vxm_u32m1(zero_u, 0x83000000U,
+                                                   n_nonpos, vl);
+        vfloat32m1_t s1 = __riscv_vreinterpret_v_u32m1_f32m1(
+            __riscv_vadd_vx_u32m1(b, 0x7f000000U, vl));
+        vfloat32m1_t s2 = __riscv_vreinterpret_v_u32m1_f32m1(
+            __riscv_vsub_vv_u32m1(e, b, vl));
+
+        // For |n| > 192: clamp to ±inf / 0 by returning s1*s1 directly
+        // (= 2^254 ≈ inf for n>0 / 2^-254 ≈ 0 for n<0).
+        vbool32_t n_huge = __riscv_vmfgt_vf_f32m1_b32(abs_n, 192.0F, vl);
+        vfloat32m1_t s1s1 = __riscv_vfmul_vv_f32m1(s1, s1, vl);
+        vfloat32m1_t s1ps2 = __riscv_vfmul_vv_f32m1(
+            s1, __riscv_vfmul_vv_f32m1(p, s2, vl), vl);
+        vfloat32m1_t special =
+            __riscv_vmerge_vvm_f32m1(s1ps2, s1s1, n_huge, vl);
+
+        return __riscv_vmerge_vvm_f32m1(fast, special, need_special, vl);
       });
 }
 

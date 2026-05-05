@@ -18,6 +18,7 @@ extern "C" kleidicv_error_t kleidicv_median_blur_u8(
     const uint8_t *src, size_t src_stride, uint8_t *dst, size_t dst_stride,
     size_t width, size_t height, size_t channels, size_t kernel_width,
     size_t kernel_height, kleidicv_border_type_t border_type) {
+  if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
   if (channels < 1 || channels > 4) return KLEIDICV_ERROR_NOT_IMPLEMENTED;
   if (kernel_width != 3 || kernel_height != 3)
     return KLEIDICV_ERROR_NOT_IMPLEMENTED;
