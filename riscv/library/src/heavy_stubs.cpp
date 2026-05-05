@@ -64,7 +64,17 @@ kleidicv_error_t do_morph_u8(const uint8_t *src, size_t src_stride,
                              kleidicv_border_type_t border,
                              const uint8_t * /*border_value*/,
                              size_t iterations, bool is_dilate) {
+  // Round-7 fix: hoist null + image-size validation above the channel
+  // dispatch so multi-channel calls reject null inputs / oversized images
+  // before the deinterleave path dereferences src.
+  if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
   if (channels < 1 || channels > 4) return KLEIDICV_ERROR_NOT_IMPLEMENTED;
+  {
+    size_t pixels = 0;
+    if (__builtin_mul_overflow(width, height, &pixels) ||
+        pixels > KLEIDICV_MAX_IMAGE_PIXELS)
+      return KLEIDICV_ERROR_RANGE;
+  }
   if (border != KLEIDICV_BORDER_TYPE_REPLICATE)
     return KLEIDICV_ERROR_NOT_IMPLEMENTED;
   if (iterations == 0) return KLEIDICV_OK;

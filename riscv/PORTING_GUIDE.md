@@ -86,6 +86,51 @@ verified via objdump):
 only (or REPLICATE+CONSTANT for remap/warp). Other border types return
 `NOT_IMPLEMENTED`.
 
+## P2601 scope choices: NOT_IMPLEMENTED variants kept out of this PR
+
+Each entry below is a public-API configuration that upstream NEON/SVE2
+supports but the riscv64 backend currently rejects with a clean
+`KLEIDICV_ERROR_NOT_IMPLEMENTED`. They are out-of-scope for the P2601
+deliverable; happy to wire them in a follow-up if reviewers consider any
+of them blocking. None are reached by the current riscv test suite or
+the LK pyramid hot path.
+
+- **`resize_linear_u8 / _f32` multi-channel** — only `channels == 1`.
+  Multi-channel `resize_linear` could reuse the per-channel
+  `vlsegN`/`vssegN` deinterleave wrap from the filter ops (~half day of
+  work; medium risk because resize uses `vluxei32` which doesn't share
+  the unit-stride scaffold).
+- **`gaussian_blur_u8` border modes** — `KLEIDICV_BORDER_TYPE_REPLICATE`
+  only. `REFLECT` / `WRAP` / `REVERSE` (a.k.a. `REFLECT_101`) all return
+  `NOT_IMPLEMENTED`. The generic-kernel-size path (added in `31dabb1`)
+  builds f32 coefficients from sigma, so adding a different clip mode
+  is a one-function swap, but each mode adds a clip-helper variant.
+- **`blur_and_downsample_u8` border modes** — `REPLICATE` (RVV) +
+  `REVERSE` + `REFLECT` (both scalar) supported. `WRAP` and `CONSTANT`
+  return `NOT_IMPLEMENTED`; neither is sensible for a Gaussian pyramid
+  blur and the LK pyramid uses `REVERSE`.
+- **`morph_u8` (`dilate` / `erode`)**: rectangular SE only with
+  `kw / 2`, `kh / 2` anchor, odd kernel sizes, `REPLICATE` border.
+  Arbitrary anchor, `CONSTANT` border, and even-sized kernels return
+  `NOT_IMPLEMENTED`. Only the LK pyramid and the `dilate` smoke test
+  exercise this op in the P2601 scope, both of which use the supported
+  configuration.
+- **`median_blur_u8`**: 3×3 hits the 9-element sorting net; 5×5 and
+  7×7 go through the generic `std::nth_element` quickselect path
+  (added in `c258f78`). Other configurations (signed types, larger
+  kernels, alternative borders) return `NOT_IMPLEMENTED`.
+- **YUV semiplanar / 420P / 422 conversions, `count_nonzeros_u8`,
+  `min_max_loc_u8`, `min_max_f32`, `scale_u8_f16`,
+  `remap_s16point5_*`, `remap_f32_*`** — function-pointer stubs in
+  `heavy_stubs.cpp` so the upstream Google-Benchmark suite links; all
+  return `NOT_IMPLEMENTED` if called.
+
+The Copilot pull-request reviewer flagged most of these across rounds
+3-7 of the PR thread. Each carries a `NOT_IMPLEMENTED` rather than a
+silent acceptance, so callers get a deterministic error code; the
+exclusions are documented above for transparency rather than hidden in
+the impl.
+
 Multi-channel filter ops (sobel, scharr, separable_filter_2d_u8/u16,
 gaussian_blur_u8 3×3, blur_and_downsample_u8, morph_u8 dilate/erode,
 median_blur_u8 3×3) now accept channels ∈ {1, 2, 3, 4}: channels=1 hits

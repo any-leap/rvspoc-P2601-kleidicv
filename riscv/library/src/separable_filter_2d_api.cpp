@@ -251,6 +251,12 @@ extern "C" kleidicv_error_t kleidicv_gaussian_blur_u8(
     kleidicv_border_type_t border_type) {
   if (!src || !dst) return KLEIDICV_ERROR_NULL_POINTER;
   if (channels < 1 || channels > 4) return KLEIDICV_ERROR_NOT_IMPLEMENTED;
+  // Round-7 fix: gaussian generic path needs the same image-size guard as
+  // every other op so multi-channel scratch allocations (width*height*channels)
+  // can't overflow.
+  if (kleidicv_error_t e =
+          kleidicv::riscv_validation::check_image_size(width, height))
+    return e;
   if (border_type != KLEIDICV_BORDER_TYPE_REPLICATE)
     return KLEIDICV_ERROR_NOT_IMPLEMENTED;
   if ((kernel_width & 1u) == 0 || (kernel_height & 1u) == 0 ||

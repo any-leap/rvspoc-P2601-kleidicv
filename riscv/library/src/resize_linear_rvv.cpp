@@ -12,7 +12,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <vector>
+#include <cstdlib>
+#include <memory>
 
 #include "resize_linear_decls.h"
 
@@ -24,6 +25,24 @@ inline ptrdiff_t clip_idx(ptrdiff_t v, ptrdiff_t n) {
   if (v < 0) return 0;
   if (v >= n) return n - 1;
   return v;
+}
+
+// Malloc-backed scratch buffer. The build runs with `-fno-exceptions`, so
+// `std::vector::resize` would call `terminate()` on OOM instead of letting
+// the API return KLEIDICV_ERROR_ALLOCATION. RAII via unique_ptr<T[], free>.
+template <typename T>
+struct Scratch {
+  std::unique_ptr<T[], void (*)(void *)> ptr{nullptr, &std::free};
+  T *get() { return ptr.get(); }
+  bool valid() const { return ptr != nullptr; }
+};
+
+template <typename T>
+Scratch<T> alloc_scratch(size_t n) {
+  Scratch<T> s;
+  if (n == 0) return s;
+  s.ptr.reset(static_cast<T *>(std::malloc(n * sizeof(T))));
+  return s;
 }
 
 }  // namespace
@@ -42,19 +61,22 @@ kleidicv_error_t resize_linear_u8(const uint8_t *src, size_t src_stride,
       static_cast<float>(src_height) / static_cast<float>(dst_height);
 
   // Precompute per-dx index/weight tables (depend only on scale_x and dst_w).
-  std::vector<uint32_t> sx0c(dst_width), sx1c(dst_width);
-  std::vector<float> fx_tbl(dst_width);
+  auto sx0c = alloc_scratch<uint32_t>(dst_width);
+  auto sx1c = alloc_scratch<uint32_t>(dst_width);
+  auto fx_tbl = alloc_scratch<float>(dst_width);
+  if (!sx0c.valid() || !sx1c.valid() || !fx_tbl.valid())
+    return KLEIDICV_ERROR_ALLOCATION;
   for (size_t dx = 0; dx < dst_width; ++dx) {
     float sx_f = (static_cast<float>(dx) + 0.5F) * scale_x - 0.5F;
     ptrdiff_t s0 = static_cast<ptrdiff_t>(std::floor(sx_f));
     float fx = sx_f - static_cast<float>(s0);
     if (fx < 0) fx = 0;
     if (fx > 1) fx = 1;
-    sx0c[dx] = static_cast<uint32_t>(
+    sx0c.get()[dx] = static_cast<uint32_t>(
         clip_idx(s0, static_cast<ptrdiff_t>(src_width)));
-    sx1c[dx] = static_cast<uint32_t>(
+    sx1c.get()[dx] = static_cast<uint32_t>(
         clip_idx(s0 + 1, static_cast<ptrdiff_t>(src_width)));
-    fx_tbl[dx] = fx;
+    fx_tbl.get()[dx] = fx;
   }
 
   for (size_t dy = 0; dy < dst_height; ++dy) {
@@ -73,9 +95,9 @@ kleidicv_error_t resize_linear_u8(const uint8_t *src, size_t src_stride,
     while (dx < dst_width) {
       size_t vl = __riscv_vsetvl_e32m4(dst_width - dx);
       // Load index + weight tables for this stripe.
-      vuint32m4_t idx0 = __riscv_vle32_v_u32m4(sx0c.data() + dx, vl);
-      vuint32m4_t idx1 = __riscv_vle32_v_u32m4(sx1c.data() + dx, vl);
-      vfloat32m4_t fx_v = __riscv_vle32_v_f32m4(fx_tbl.data() + dx, vl);
+      vuint32m4_t idx0 = __riscv_vle32_v_u32m4(sx0c.get() + dx, vl);
+      vuint32m4_t idx1 = __riscv_vle32_v_u32m4(sx1c.get() + dx, vl);
+      vfloat32m4_t fx_v = __riscv_vle32_v_f32m4(fx_tbl.get() + dx, vl);
 
       // Indexed u8 gather → widen → float.
       vuint8m1_t p00_u8 = __riscv_vluxei32_v_u8m1(r0, idx0, vl);
@@ -131,8 +153,11 @@ kleidicv_error_t resize_linear_f32(const float *src, size_t src_stride,
   const size_t src_stride_e = src_stride / sizeof(float);
   const size_t dst_stride_e = dst_stride / sizeof(float);
 
-  std::vector<uint32_t> sx0c_b(dst_width), sx1c_b(dst_width);
-  std::vector<float> fx_tbl(dst_width);
+  auto sx0c_b = alloc_scratch<uint32_t>(dst_width);
+  auto sx1c_b = alloc_scratch<uint32_t>(dst_width);
+  auto fx_tbl = alloc_scratch<float>(dst_width);
+  if (!sx0c_b.valid() || !sx1c_b.valid() || !fx_tbl.valid())
+    return KLEIDICV_ERROR_ALLOCATION;
   for (size_t dx = 0; dx < dst_width; ++dx) {
     float sx_f = (static_cast<float>(dx) + 0.5F) * scale_x - 0.5F;
     ptrdiff_t s0 = static_cast<ptrdiff_t>(std::floor(sx_f));
@@ -140,13 +165,13 @@ kleidicv_error_t resize_linear_f32(const float *src, size_t src_stride,
     if (fx < 0) fx = 0;
     if (fx > 1) fx = 1;
     // f32 indices are in bytes for vluxei (byte-offset semantics).
-    sx0c_b[dx] = static_cast<uint32_t>(
+    sx0c_b.get()[dx] = static_cast<uint32_t>(
         clip_idx(s0, static_cast<ptrdiff_t>(src_width))) *
                   static_cast<uint32_t>(sizeof(float));
-    sx1c_b[dx] = static_cast<uint32_t>(
+    sx1c_b.get()[dx] = static_cast<uint32_t>(
         clip_idx(s0 + 1, static_cast<ptrdiff_t>(src_width))) *
                   static_cast<uint32_t>(sizeof(float));
-    fx_tbl[dx] = fx;
+    fx_tbl.get()[dx] = fx;
   }
 
   for (size_t dy = 0; dy < dst_height; ++dy) {
@@ -164,9 +189,9 @@ kleidicv_error_t resize_linear_f32(const float *src, size_t src_stride,
     size_t dx = 0;
     while (dx < dst_width) {
       size_t vl = __riscv_vsetvl_e32m4(dst_width - dx);
-      vuint32m4_t bidx0 = __riscv_vle32_v_u32m4(sx0c_b.data() + dx, vl);
-      vuint32m4_t bidx1 = __riscv_vle32_v_u32m4(sx1c_b.data() + dx, vl);
-      vfloat32m4_t fx_v = __riscv_vle32_v_f32m4(fx_tbl.data() + dx, vl);
+      vuint32m4_t bidx0 = __riscv_vle32_v_u32m4(sx0c_b.get() + dx, vl);
+      vuint32m4_t bidx1 = __riscv_vle32_v_u32m4(sx1c_b.get() + dx, vl);
+      vfloat32m4_t fx_v = __riscv_vle32_v_f32m4(fx_tbl.get() + dx, vl);
 
       vfloat32m4_t p00 = __riscv_vluxei32_v_f32m4(r0, bidx0, vl);
       vfloat32m4_t p01 = __riscv_vluxei32_v_f32m4(r0, bidx1, vl);
